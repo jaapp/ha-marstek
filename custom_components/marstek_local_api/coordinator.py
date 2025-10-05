@@ -81,19 +81,6 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
             return None
         return int(time.time() - self.last_message_timestamp)
 
-    @property
-    def data(self) -> dict[str, Any]:
-        """Get coordinator data with updated diagnostic values."""
-        base_data = super().data
-        if base_data and self.last_message_timestamp:
-            # Update diagnostic data with current seconds
-            if "_diagnostic" not in base_data:
-                base_data["_diagnostic"] = {}
-            base_data["_diagnostic"]["last_message_seconds"] = (
-                self._get_seconds_since_last_message()
-            )
-        return base_data
-
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from API with tiered polling strategy."""
         try:
