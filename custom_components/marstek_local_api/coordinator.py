@@ -86,9 +86,25 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
         try:
             data = {}
 
+            # On first update, always get device info for initial setup
+            is_first_update = self.data is None or not self.data
+            if is_first_update:
+                _LOGGER.debug("First update - fetching device info")
+                try:
+                    device_info = await self.api.get_device_info()
+                    if device_info:
+                        data["device"] = device_info
+                except Exception as err:
+                    _LOGGER.warning("Failed to get device info on first update: %s", err)
+
             # High priority - every update (15s)
             # ES.GetStatus and EM.GetStatus for real-time power/energy data
-            es_status = await self.api.get_es_status()
+            try:
+                es_status = await self.api.get_es_status()
+            except Exception as err:
+                _LOGGER.debug("Failed to get ES status: %s", err)
+                es_status = None
+
             if es_status:
                 # Scale firmware-dependent values
                 if "bat_power" in es_status:
@@ -110,35 +126,49 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
 
                 data["es"] = es_status
 
-            em_status = await self.api.get_em_status()
+            try:
+                em_status = await self.api.get_em_status()
+            except Exception as err:
+                _LOGGER.debug("Failed to get EM status: %s", err)
+                em_status = None
+
             if em_status:
                 data["em"] = em_status
 
             # Medium priority - every 4th update (60s)
             # Battery, PV, Mode - slower-changing data
             if self.update_count % UPDATE_INTERVAL_MEDIUM == 0:
-                battery_status = await self.api.get_battery_status()
-                if battery_status:
-                    # Scale firmware-dependent values
-                    if "bat_temp" in battery_status:
-                        battery_status["bat_temp"] = self._scale_value(
-                            battery_status["bat_temp"], "bat_temp"
-                        )
-                    if "bat_capacity" in battery_status:
-                        battery_status["bat_capacity"] = self._scale_value(
-                            battery_status["bat_capacity"], "bat_capacity"
-                        )
-                    data["battery"] = battery_status
+                try:
+                    battery_status = await self.api.get_battery_status()
+                    if battery_status:
+                        # Scale firmware-dependent values
+                        if "bat_temp" in battery_status:
+                            battery_status["bat_temp"] = self._scale_value(
+                                battery_status["bat_temp"], "bat_temp"
+                            )
+                        if "bat_capacity" in battery_status:
+                            battery_status["bat_capacity"] = self._scale_value(
+                                battery_status["bat_capacity"], "bat_capacity"
+                            )
+                        data["battery"] = battery_status
+                except Exception as err:
+                    _LOGGER.debug("Failed to get battery status: %s", err)
 
                 # Only query PV for Venus D
                 if self.device_model == DEVICE_MODEL_VENUS_D:
-                    pv_status = await self.api.get_pv_status()
-                    if pv_status:
-                        data["pv"] = pv_status
+                    try:
+                        pv_status = await self.api.get_pv_status()
+                        if pv_status:
+                            data["pv"] = pv_status
+                    except Exception as err:
+                        _LOGGER.debug("Failed to get PV status: %s", err)
 
-                mode_status = await self.api.get_es_mode()
-                if mode_status:
-                    data["mode"] = mode_status
+                try:
+                    mode_status = await self.api.get_es_mode()
+                    if mode_status:
+                        data["mode"] = mode_status
+                except Exception as err:
+                    _LOGGER.debug("Failed to get mode status: %s", err)
 
             # Low priority - every 20th update (300s)
             # Device, WiFi, BLE - static/diagnostic data
@@ -168,7 +198,10 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
             self.update_count += 1
 
             # If we got no data at all, raise an error
+            # On first update, be more lenient - just log a warning
             if not data:
+                if is_first_update:
+                    raise UpdateFailed("No response from device - check network connectivity")
                 raise UpdateFailed("No data received from device")
 
             # Update last message timestamp (Design Doc §556-576)
