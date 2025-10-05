@@ -1,0 +1,390 @@
+"""Sensor platform for Marstek Local API."""
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass
+import logging
+
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
+    SensorStateClass,
+)
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import (
+    PERCENTAGE,
+    UnitOfElectricCurrent,
+    UnitOfElectricPotential,
+    UnitOfEnergy,
+    UnitOfPower,
+    UnitOfTemperature,
+    UnitOfTime,
+)
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+
+from .const import DATA_COORDINATOR, DEVICE_MODEL_VENUS_D, DOMAIN
+from .coordinator import MarstekDataUpdateCoordinator
+
+_LOGGER = logging.getLogger(__name__)
+
+
+@dataclass
+class MarstekSensorEntityDescription(SensorEntityDescription):
+    """Describes Marstek sensor entity."""
+
+    value_fn: Callable[[dict], any] | None = None
+    available_fn: Callable[[dict], bool] | None = None
+
+
+SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
+    # Battery sensors
+    MarstekSensorEntityDescription(
+        key="battery_soc",
+        name="Battery State of Charge",
+        native_unit_of_measurement=PERCENTAGE,
+        device_class=SensorDeviceClass.BATTERY,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.get("battery", {}).get("soc"),
+    ),
+    MarstekSensorEntityDescription(
+        key="battery_temperature",
+        name="Battery Temperature",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.get("battery", {}).get("bat_temp"),
+    ),
+    MarstekSensorEntityDescription(
+        key="battery_capacity",
+        name="Battery Remaining Capacity",
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY_STORAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.get("battery", {}).get("bat_capacity"),
+    ),
+    MarstekSensorEntityDescription(
+        key="battery_rated_capacity",
+        name="Battery Rated Capacity",
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY_STORAGE,
+        value_fn=lambda data: data.get("battery", {}).get("rated_capacity"),
+    ),
+    # Energy System sensors
+    MarstekSensorEntityDescription(
+        key="battery_power",
+        name="Battery Power",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.get("es", {}).get("bat_power"),
+    ),
+    # Calculated battery sensors (Design Doc §174-202)
+    MarstekSensorEntityDescription(
+        key="battery_power_in",
+        name="Battery Power In",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: max(0, data.get("es", {}).get("bat_power", 0) or 0),
+    ),
+    MarstekSensorEntityDescription(
+        key="battery_power_out",
+        name="Battery Power Out",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: max(0, -(data.get("es", {}).get("bat_power", 0) or 0)),
+    ),
+    MarstekSensorEntityDescription(
+        key="battery_state",
+        name="Battery State",
+        value_fn=lambda data: (
+            "charging" if (data.get("es", {}).get("bat_power", 0) or 0) > 0
+            else "discharging" if (data.get("es", {}).get("bat_power", 0) or 0) < 0
+            else "idle"
+        ),
+    ),
+    MarstekSensorEntityDescription(
+        key="battery_available_capacity",
+        name="Battery Available Capacity",
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY_STORAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: (
+            (100 - (data.get("battery", {}).get("soc", 0) or 0))
+            * (data.get("battery", {}).get("rated_capacity", 0) or 0)
+            / 100
+            if data.get("battery", {}).get("soc") is not None
+            and data.get("battery", {}).get("rated_capacity") is not None
+            else None
+        ),
+    ),
+    MarstekSensorEntityDescription(
+        key="grid_power",
+        name="Grid Power",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.get("es", {}).get("ongrid_power"),
+    ),
+    MarstekSensorEntityDescription(
+        key="offgrid_power",
+        name="Off-Grid Power",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.get("es", {}).get("offgrid_power"),
+    ),
+    MarstekSensorEntityDescription(
+        key="pv_power_es",
+        name="Solar Power",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.get("es", {}).get("pv_power"),
+    ),
+    MarstekSensorEntityDescription(
+        key="total_pv_energy",
+        name="Total Solar Energy",
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        value_fn=lambda data: data.get("es", {}).get("total_pv_energy"),
+    ),
+    MarstekSensorEntityDescription(
+        key="total_grid_import",
+        name="Total Grid Import",
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        value_fn=lambda data: data.get("es", {}).get("total_grid_input_energy"),
+    ),
+    MarstekSensorEntityDescription(
+        key="total_grid_export",
+        name="Total Grid Export",
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        value_fn=lambda data: data.get("es", {}).get("total_grid_output_energy"),
+    ),
+    MarstekSensorEntityDescription(
+        key="total_load_energy",
+        name="Total Load Energy",
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        value_fn=lambda data: data.get("es", {}).get("total_load_energy"),
+    ),
+    # Energy Meter / CT sensors
+    MarstekSensorEntityDescription(
+        key="ct_phase_a_power",
+        name="CT Phase A Power",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.get("em", {}).get("a_power"),
+    ),
+    MarstekSensorEntityDescription(
+        key="ct_phase_b_power",
+        name="CT Phase B Power",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.get("em", {}).get("b_power"),
+    ),
+    MarstekSensorEntityDescription(
+        key="ct_phase_c_power",
+        name="CT Phase C Power",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.get("em", {}).get("c_power"),
+    ),
+    MarstekSensorEntityDescription(
+        key="ct_total_power",
+        name="CT Total Power",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.get("em", {}).get("total_power"),
+    ),
+    # WiFi sensors
+    MarstekSensorEntityDescription(
+        key="wifi_rssi",
+        name="WiFi Signal Strength",
+        native_unit_of_measurement="dBm",
+        device_class=SensorDeviceClass.SIGNAL_STRENGTH,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.get("wifi", {}).get("rssi"),
+    ),
+    MarstekSensorEntityDescription(
+        key="wifi_ssid",
+        name="WiFi SSID",
+        value_fn=lambda data: data.get("wifi", {}).get("ssid"),
+    ),
+    MarstekSensorEntityDescription(
+        key="wifi_ip",
+        name="WiFi IP Address",
+        value_fn=lambda data: data.get("wifi", {}).get("sta_ip"),
+    ),
+    MarstekSensorEntityDescription(
+        key="wifi_gateway",
+        name="WiFi Gateway",
+        value_fn=lambda data: data.get("wifi", {}).get("sta_gate"),
+    ),
+    MarstekSensorEntityDescription(
+        key="wifi_subnet",
+        name="WiFi Subnet Mask",
+        value_fn=lambda data: data.get("wifi", {}).get("sta_mask"),
+    ),
+    MarstekSensorEntityDescription(
+        key="wifi_dns",
+        name="WiFi DNS Server",
+        value_fn=lambda data: data.get("wifi", {}).get("sta_dns"),
+    ),
+    # Device info sensors
+    MarstekSensorEntityDescription(
+        key="device_model",
+        name="Device Model",
+        value_fn=lambda data: data.get("device", {}).get("device"),
+    ),
+    MarstekSensorEntityDescription(
+        key="firmware_version",
+        name="Firmware Version",
+        value_fn=lambda data: data.get("device", {}).get("ver"),
+    ),
+    MarstekSensorEntityDescription(
+        key="ble_mac",
+        name="Bluetooth MAC",
+        value_fn=lambda data: data.get("device", {}).get("ble_mac"),
+    ),
+    MarstekSensorEntityDescription(
+        key="wifi_mac",
+        name="WiFi MAC",
+        value_fn=lambda data: data.get("device", {}).get("wifi_mac"),
+    ),
+    MarstekSensorEntityDescription(
+        key="device_ip",
+        name="Device IP Address",
+        value_fn=lambda data: data.get("device", {}).get("ip"),
+    ),
+    # Diagnostic sensors (Design Doc §556-576, §679-688)
+    MarstekSensorEntityDescription(
+        key="last_message_received",
+        name="Last Message Received",
+        native_unit_of_measurement=UnitOfTime.SECONDS,
+        device_class=SensorDeviceClass.DURATION,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.get("_diagnostic", {}).get("last_message_seconds"),
+    ),
+    # Operating mode
+    MarstekSensorEntityDescription(
+        key="operating_mode",
+        name="Operating Mode",
+        value_fn=lambda data: data.get("mode", {}).get("mode"),
+    ),
+)
+
+# PV sensors (Venus D only)
+PV_SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
+    MarstekSensorEntityDescription(
+        key="pv_power",
+        name="PV Power",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.get("pv", {}).get("pv_power"),
+    ),
+    MarstekSensorEntityDescription(
+        key="pv_voltage",
+        name="PV Voltage",
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.get("pv", {}).get("pv_voltage"),
+    ),
+    MarstekSensorEntityDescription(
+        key="pv_current",
+        name="PV Current",
+        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.get("pv", {}).get("pv_current"),
+    ),
+)
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Set up Marstek sensor based on a config entry."""
+    coordinator = hass.data[DOMAIN][entry.entry_id][DATA_COORDINATOR]
+
+    entities = []
+
+    # Add standard sensors
+    for description in SENSOR_TYPES:
+        entities.append(
+            MarstekSensor(
+                coordinator=coordinator,
+                entity_description=description,
+                entry=entry,
+            )
+        )
+
+    # Add PV sensors if Venus D
+    if coordinator.device_model == DEVICE_MODEL_VENUS_D:
+        for description in PV_SENSOR_TYPES:
+            entities.append(
+                MarstekSensor(
+                    coordinator=coordinator,
+                    entity_description=description,
+                    entry=entry,
+                )
+            )
+
+    async_add_entities(entities)
+
+
+class MarstekSensor(CoordinatorEntity, SensorEntity):
+    """Representation of a Marstek sensor."""
+
+    entity_description: MarstekSensorEntityDescription
+
+    def __init__(
+        self,
+        coordinator: MarstekDataUpdateCoordinator,
+        entity_description: MarstekSensorEntityDescription,
+        entry: ConfigEntry,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self.entity_description = entity_description
+        self._attr_unique_id = f"{entry.data['mac']}_{entity_description.key}"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, entry.data["mac"])},
+            name=f"Marstek {entry.data['device']}",
+            manufacturer="Marstek",
+            model=entry.data["device"],
+            sw_version=str(entry.data.get("firmware", "Unknown")),
+        )
+
+    @property
+    def native_value(self):
+        """Return the state of the sensor."""
+        if self.entity_description.value_fn:
+            return self.entity_description.value_fn(self.coordinator.data)
+        return None
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        if self.entity_description.available_fn:
+            return self.entity_description.available_fn(self.coordinator.data)
+        return super().available

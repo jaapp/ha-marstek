@@ -1,0 +1,50 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Marstek Local API",
+        "description": "Set up Marstek device using Local API"
+      },
+      "discovery": {
+        "title": "Discovered Devices",
+        "description": "Select a discovered Marstek device or choose manual entry",
+        "data": {
+          "device": "Device"
+        }
+      },
+      "manual": {
+        "title": "Manual Configuration",
+        "description": "Enter the IP address of your Marstek device",
+        "data": {
+          "host": "IP Address",
+          "port": "Port"
+        }
+      },
+      "discovery_confirm": {
+        "title": "Discovered Marstek Device",
+        "description": "A Marstek device ({name}) was discovered on your network. Do you want to add it to Home Assistant?"
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to device",
+      "device_not_found": "Selected device not found",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "Device is already configured",
+      "cannot_connect": "Failed to connect to discovered device",
+      "unknown": "Unknown error occurred during discovery"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Marstek Local API Options",
+        "description": "Configure update intervals and settings",
+        "data": {
+          "scan_interval": "Update Interval (seconds)"
+        }
+      }
+    }
+  }
+}
