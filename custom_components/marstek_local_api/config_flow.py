@@ -86,7 +86,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is None:
             # Perform discovery
-            api = MarstekUDPClient(self.hass, port=DEFAULT_PORT)
+            # Use ephemeral port for binding, broadcast to DEFAULT_PORT
+            api = MarstekUDPClient(self.hass, port=0, remote_port=DEFAULT_PORT)
             try:
                 await api.connect()
                 self._discovered_devices = await api.discover_devices()
