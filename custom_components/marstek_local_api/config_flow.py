@@ -8,6 +8,7 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.components import dhcp
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_NAME
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
@@ -244,15 +245,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @staticmethod
     def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
         """Get the options flow for this handler."""
-        return OptionsFlow(config_entry)
+        return OptionsFlow()
 
 
 class OptionsFlow(config_entries.OptionsFlow):
     """Handle options flow for Marstek Local API."""
-
-    def __init__(self, config_entry: ConfigEntry) -> None:
-        """Initialize options flow."""
-        self.config_entry = config_entry
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None

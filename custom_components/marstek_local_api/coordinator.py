@@ -38,7 +38,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
         self.api = api
         self.firmware_version = firmware_version
         self.device_model = device_model
-        self.update_count = 0
+        self.update_count = 1  # Start at 1 to skip slow updates on first refresh
         self.last_message_timestamp: float | None = None
 
         super().__init__(
@@ -143,17 +143,26 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
             # Low priority - every 20th update (300s)
             # Device, WiFi, BLE - static/diagnostic data
             if self.update_count % UPDATE_INTERVAL_SLOW == 0:
-                device_info = await self.api.get_device_info()
-                if device_info:
-                    data["device"] = device_info
+                try:
+                    device_info = await self.api.get_device_info()
+                    if device_info:
+                        data["device"] = device_info
+                except Exception as err:
+                    _LOGGER.debug("Failed to get device info: %s", err)
 
-                wifi_status = await self.api.get_wifi_status()
-                if wifi_status:
-                    data["wifi"] = wifi_status
+                try:
+                    wifi_status = await self.api.get_wifi_status()
+                    if wifi_status:
+                        data["wifi"] = wifi_status
+                except Exception as err:
+                    _LOGGER.debug("Failed to get wifi status: %s", err)
 
-                ble_status = await self.api.get_ble_status()
-                if ble_status:
-                    data["ble"] = ble_status
+                try:
+                    ble_status = await self.api.get_ble_status()
+                    if ble_status:
+                        data["ble"] = ble_status
+                except Exception as err:
+                    _LOGGER.debug("Failed to get BLE status: %s", err)
 
             # Increment update counter
             self.update_count += 1
