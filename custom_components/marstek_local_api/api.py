@@ -30,11 +30,19 @@ _LOGGER = logging.getLogger(__name__)
 class MarstekUDPClient:
     """UDP client for Marstek Local API communication."""
 
-    def __init__(self, hass, host: str | None = None, port: int = DEFAULT_PORT) -> None:
-        """Initialize the UDP client."""
+    def __init__(self, hass, host: str | None = None, port: int = DEFAULT_PORT, remote_port: int | None = None) -> None:
+        """Initialize the UDP client.
+
+        Args:
+            hass: Home Assistant instance
+            host: Target host IP (None for broadcast)
+            port: Local port to bind to (0 for ephemeral)
+            remote_port: Remote port to send to (defaults to DEFAULT_PORT)
+        """
         self.hass = hass
         self.host = host
         self.port = port
+        self.remote_port = remote_port or DEFAULT_PORT
         self.transport: asyncio.DatagramTransport | None = None
         self.protocol: MarstekProtocol | None = None
         self._handlers: list = []
@@ -158,10 +166,10 @@ class MarstekUDPClient:
             raise MarstekAPIError("Not connected")
 
         if self.host:
-            # Send to specific host
+            # Send to specific host on remote port
             self.transport.sendto(
                 message.encode(),
-                (self.host, self.port)
+                (self.host, self.remote_port)
             )
         else:
             # Broadcast
@@ -177,7 +185,7 @@ class MarstekUDPClient:
 
         self.transport.sendto(
             message.encode(),
-            (broadcast_addr, self.port)
+            (broadcast_addr, self.remote_port)
         )
         _LOGGER.debug("Broadcast message: %s", message)
 
@@ -304,7 +312,7 @@ class MarstekUDPClient:
                     if self.transport:
                         self.transport.sendto(
                             message.encode(),
-                            (broadcast_addr, self.port)
+                            (broadcast_addr, self.remote_port)
                         )
                 await asyncio.sleep(DISCOVERY_BROADCAST_INTERVAL)
 
