@@ -31,12 +31,11 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any], use_ephemera
     """Validate the user input allows us to connect.
 
     Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
-    use_ephemeral_port: Use port 0 (ephemeral) to avoid conflicts with existing instances
+    use_ephemeral_port: Deprecated parameter, kept for compatibility
     """
-    # Use ephemeral port (0) for validation to avoid conflicts with running instances
+    # Always bind to device port (reuse_port allows multiple instances)
     target_port = data.get(CONF_PORT, DEFAULT_PORT)
-    local_port = 0 if use_ephemeral_port else target_port
-    api = MarstekUDPClient(hass, data.get(CONF_HOST), local_port, remote_port=target_port)
+    api = MarstekUDPClient(hass, data.get(CONF_HOST), target_port, remote_port=target_port)
 
     try:
         await api.connect()
@@ -86,8 +85,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is None:
             # Perform discovery
-            # Use ephemeral port for binding, broadcast to DEFAULT_PORT
-            api = MarstekUDPClient(self.hass, port=0, remote_port=DEFAULT_PORT)
+            # Bind to same port as device (required by Marstek protocol)
+            api = MarstekUDPClient(self.hass, port=DEFAULT_PORT, remote_port=DEFAULT_PORT)
             try:
                 await api.connect()
                 self._discovered_devices = await api.discover_devices()

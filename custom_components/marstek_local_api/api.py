@@ -55,11 +55,12 @@ class MarstekUDPClient:
 
         loop = asyncio.get_event_loop()
 
-        # Create UDP endpoint
+        # Create UDP endpoint with port reuse to allow multiple instances
         self.transport, self.protocol = await loop.create_datagram_endpoint(
             lambda: MarstekProtocol(self),
             local_addr=("0.0.0.0", self.port),
             allow_broadcast=True,
+            reuse_port=True,  # Allow multiple binds to same port
         )
 
         self._connected = True

@@ -21,11 +21,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
 
     # Create API client
-    # Use ephemeral port (0) for local binding, send to device on configured port
+    # Bind to same port as device (required by Marstek protocol)
+    # Use reuse_port to allow multiple instances
     api = MarstekUDPClient(
         hass,
         host=entry.data[CONF_HOST],
-        port=0,  # Bind to any available port
+        port=entry.data[CONF_PORT],  # Bind to device port (with reuse_port)
         remote_port=entry.data[CONF_PORT],  # Send to device port
     )
 
