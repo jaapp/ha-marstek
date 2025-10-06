@@ -28,8 +28,18 @@ def load_module_from_file(module_name: str, file_path: Path):
     return module
 
 
-# Get paths to integration modules - always relative to this script
+# Get paths to integration modules
+# Try common locations
 integration_path = Path(__file__).parent.parent / "custom_components" / "marstek_local_api"
+if not integration_path.exists():
+    # Try HA location
+    integration_path = Path("/config/custom_components/marstek_local_api")
+
+if not integration_path.exists():
+    print(f"ERROR: Cannot find integration at:")
+    print(f"  - {Path(__file__).parent.parent / 'custom_components' / 'marstek_local_api'}")
+    print(f"  - /config/custom_components/marstek_local_api")
+    sys.exit(1)
 
 # Create a fake package structure to allow relative imports
 package_name = "custom_components.marstek_local_api"
