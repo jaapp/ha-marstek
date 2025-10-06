@@ -85,6 +85,16 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is None:
             # Perform discovery
+            # Temporarily disconnect existing integration clients to avoid port conflicts
+            paused_clients = []
+            for entry in self._async_current_entries():
+                if DOMAIN in self.hass.data and entry.entry_id in self.hass.data[DOMAIN]:
+                    coordinator = self.hass.data[DOMAIN][entry.entry_id].get(DATA_COORDINATOR)
+                    if coordinator and coordinator.api:
+                        _LOGGER.debug("Pausing API client for %s during discovery", entry.title)
+                        await coordinator.api.disconnect()
+                        paused_clients.append(coordinator.api)
+
             # Bind to same port as device (required by Marstek protocol)
             api = MarstekUDPClient(self.hass, port=DEFAULT_PORT, remote_port=DEFAULT_PORT)
             try:
@@ -93,6 +103,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await api.disconnect()
 
                 _LOGGER.info("Discovered %d device(s): %s", len(self._discovered_devices), self._discovered_devices)
+            finally:
+                # Resume paused clients
+                for client in paused_clients:
+                    _LOGGER.debug("Resuming paused API client")
+                    await client.connect()
 
                 if not self._discovered_devices:
                     # No devices found, offer manual entry
