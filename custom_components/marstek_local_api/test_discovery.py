@@ -28,8 +28,8 @@ def load_module_from_file(module_name: str, file_path: Path):
     return module
 
 
-# Get paths to integration modules - always relative to this script
-integration_path = Path(__file__).parent.parent / "custom_components" / "marstek_local_api"
+# Get paths to integration modules - same directory as this script when in custom_components
+integration_path = Path(__file__).parent
 
 # Create a fake package structure to allow relative imports
 package_name = "custom_components.marstek_local_api"
