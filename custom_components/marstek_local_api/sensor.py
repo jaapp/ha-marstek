@@ -44,7 +44,7 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     # Battery sensors
     MarstekSensorEntityDescription(
         key="battery_soc",
-        name="Battery State of Charge",
+        name="State of charge",
         native_unit_of_measurement=PERCENTAGE,
         device_class=SensorDeviceClass.BATTERY,
         state_class=SensorStateClass.MEASUREMENT,
@@ -52,7 +52,7 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     ),
     MarstekSensorEntityDescription(
         key="battery_temperature",
-        name="Battery Temperature",
+        name="Temperature",
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -60,7 +60,7 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     ),
     MarstekSensorEntityDescription(
         key="battery_capacity",
-        name="Battery Remaining Capacity",
+        name="Remaining capacity",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY_STORAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -68,7 +68,7 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     ),
     MarstekSensorEntityDescription(
         key="battery_rated_capacity",
-        name="Battery Rated Capacity",
+        name="Rated capacity",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY_STORAGE,
         value_fn=lambda data: data.get("battery", {}).get("rated_capacity"),
@@ -76,7 +76,7 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     # Energy System sensors
     MarstekSensorEntityDescription(
         key="battery_power",
-        name="Battery Power",
+        name="Power",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -85,7 +85,7 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     # Calculated battery sensors (Design Doc §174-202)
     MarstekSensorEntityDescription(
         key="battery_power_in",
-        name="Battery Power In",
+        name="Power in",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -93,7 +93,7 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     ),
     MarstekSensorEntityDescription(
         key="battery_power_out",
-        name="Battery Power Out",
+        name="Power out",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -101,7 +101,7 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     ),
     MarstekSensorEntityDescription(
         key="battery_state",
-        name="Battery State",
+        name="State",
         value_fn=lambda data: (
             "charging" if (data.get("es", {}).get("bat_power", 0) or 0) > 0
             else "discharging" if (data.get("es", {}).get("bat_power", 0) or 0) < 0
@@ -110,7 +110,7 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     ),
     MarstekSensorEntityDescription(
         key="battery_available_capacity",
-        name="Battery Available Capacity",
+        name="Available capacity",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY_STORAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -125,7 +125,7 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     ),
     MarstekSensorEntityDescription(
         key="grid_power",
-        name="Grid Power",
+        name="Grid power",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -133,7 +133,7 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     ),
     MarstekSensorEntityDescription(
         key="offgrid_power",
-        name="Off-Grid Power",
+        name="Off-grid power",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -141,7 +141,7 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     ),
     MarstekSensorEntityDescription(
         key="pv_power_es",
-        name="Solar Power",
+        name="Solar power",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -149,7 +149,7 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     ),
     MarstekSensorEntityDescription(
         key="total_pv_energy",
-        name="Total Solar Energy",
+        name="Total solar energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -157,7 +157,7 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     ),
     MarstekSensorEntityDescription(
         key="total_grid_import",
-        name="Total Grid Import",
+        name="Total grid import",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -165,7 +165,7 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     ),
     MarstekSensorEntityDescription(
         key="total_grid_export",
-        name="Total Grid Export",
+        name="Total grid export",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -173,7 +173,7 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     ),
     MarstekSensorEntityDescription(
         key="total_load_energy",
-        name="Total Load Energy",
+        name="Total load energy",
         native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -182,7 +182,7 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     # Energy Meter / CT sensors
     MarstekSensorEntityDescription(
         key="ct_phase_a_power",
-        name="CT Phase A Power",
+        name="CT phase A power",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -190,7 +190,7 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     ),
     MarstekSensorEntityDescription(
         key="ct_phase_b_power",
-        name="CT Phase B Power",
+        name="CT phase B power",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -198,7 +198,7 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     ),
     MarstekSensorEntityDescription(
         key="ct_phase_c_power",
-        name="CT Phase C Power",
+        name="CT phase C power",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -206,7 +206,7 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     ),
     MarstekSensorEntityDescription(
         key="ct_total_power",
-        name="CT Total Power",
+        name="CT total power",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -215,7 +215,7 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     # WiFi sensors
     MarstekSensorEntityDescription(
         key="wifi_rssi",
-        name="WiFi Signal Strength",
+        name="WiFi signal strength",
         native_unit_of_measurement="dBm",
         device_class=SensorDeviceClass.SIGNAL_STRENGTH,
         state_class=SensorStateClass.MEASUREMENT,
@@ -228,33 +228,33 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     ),
     MarstekSensorEntityDescription(
         key="wifi_ip",
-        name="WiFi IP Address",
+        name="WiFi IP address",
         value_fn=lambda data: data.get("wifi", {}).get("sta_ip"),
     ),
     MarstekSensorEntityDescription(
         key="wifi_gateway",
-        name="WiFi Gateway",
+        name="WiFi gateway",
         value_fn=lambda data: data.get("wifi", {}).get("sta_gate"),
     ),
     MarstekSensorEntityDescription(
         key="wifi_subnet",
-        name="WiFi Subnet Mask",
+        name="WiFi subnet mask",
         value_fn=lambda data: data.get("wifi", {}).get("sta_mask"),
     ),
     MarstekSensorEntityDescription(
         key="wifi_dns",
-        name="WiFi DNS Server",
+        name="WiFi DNS server",
         value_fn=lambda data: data.get("wifi", {}).get("sta_dns"),
     ),
     # Device info sensors
     MarstekSensorEntityDescription(
         key="device_model",
-        name="Device Model",
+        name="Model",
         value_fn=lambda data: data.get("device", {}).get("device"),
     ),
     MarstekSensorEntityDescription(
         key="firmware_version",
-        name="Firmware Version",
+        name="Firmware version",
         value_fn=lambda data: data.get("device", {}).get("ver"),
     ),
     MarstekSensorEntityDescription(
@@ -269,13 +269,13 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     ),
     MarstekSensorEntityDescription(
         key="device_ip",
-        name="Device IP Address",
+        name="IP address",
         value_fn=lambda data: data.get("device", {}).get("ip"),
     ),
     # Diagnostic sensors (Design Doc §556-576, §679-688)
     MarstekSensorEntityDescription(
         key="last_message_received",
-        name="Last Message Received",
+        name="Last message received",
         native_unit_of_measurement=UnitOfTime.SECONDS,
         device_class=SensorDeviceClass.DURATION,
         state_class=SensorStateClass.MEASUREMENT,
@@ -284,7 +284,7 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     # Operating mode
     MarstekSensorEntityDescription(
         key="operating_mode",
-        name="Operating Mode",
+        name="Operating mode",
         value_fn=lambda data: data.get("mode", {}).get("mode"),
     ),
 )
@@ -293,7 +293,7 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
 PV_SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     MarstekSensorEntityDescription(
         key="pv_power",
-        name="PV Power",
+        name="PV power",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -301,7 +301,7 @@ PV_SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     ),
     MarstekSensorEntityDescription(
         key="pv_voltage",
-        name="PV Voltage",
+        name="PV voltage",
         native_unit_of_measurement=UnitOfElectricPotential.VOLT,
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -309,7 +309,7 @@ PV_SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     ),
     MarstekSensorEntityDescription(
         key="pv_current",
-        name="PV Current",
+        name="PV current",
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
@@ -366,6 +366,7 @@ class MarstekSensor(CoordinatorEntity, SensorEntity):
         """Initialize the sensor."""
         super().__init__(coordinator)
         self.entity_description = entity_description
+        self._attr_has_entity_name = True
         self._attr_unique_id = f"{entry.data['mac']}_{entity_description.key}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.data["mac"])},

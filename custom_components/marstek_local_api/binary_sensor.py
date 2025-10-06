@@ -39,26 +39,26 @@ BINARY_SENSOR_TYPES: tuple[MarstekBinarySensorEntityDescription, ...] = (
     # Battery charging/discharging flags
     MarstekBinarySensorEntityDescription(
         key="charging_enabled",
-        name="Charging Enabled",
+        name="Charging enabled",
         device_class=BinarySensorDeviceClass.BATTERY_CHARGING,
         value_fn=lambda data: data.get("battery", {}).get("charg_flag", False),
     ),
     MarstekBinarySensorEntityDescription(
         key="discharging_enabled",
-        name="Discharging Enabled",
+        name="Discharging enabled",
         value_fn=lambda data: data.get("battery", {}).get("dischrg_flag", False),
     ),
     # Bluetooth connection
     MarstekBinarySensorEntityDescription(
         key="bluetooth_connected",
-        name="Bluetooth Connected",
+        name="Bluetooth connected",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
         value_fn=lambda data: data.get("ble", {}).get("state") == BLE_STATE_CONNECT,
     ),
     # CT connection
     MarstekBinarySensorEntityDescription(
         key="ct_connected",
-        name="CT Connected",
+        name="CT connected",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
         value_fn=lambda data: data.get("em", {}).get("ct_state") == CT_STATE_CONNECTED,
     ),
@@ -101,6 +101,7 @@ class MarstekBinarySensor(CoordinatorEntity, BinarySensorEntity):
         """Initialize the binary sensor."""
         super().__init__(coordinator)
         self.entity_description = entity_description
+        self._attr_has_entity_name = True
         self._attr_unique_id = f"{entry.data['mac']}_{entity_description.key}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.data["mac"])},
