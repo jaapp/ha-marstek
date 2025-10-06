@@ -115,7 +115,10 @@ class MarstekUDPClient:
 
     async def disconnect(self) -> None:
         """Disconnect from the UDP socket."""
-        if self.transport and self.port in _transport_refcounts:
+        if not self._connected:
+            return
+
+        if self.port in _transport_refcounts:
             # Unregister this client from message dispatching
             if self.port in _clients_by_port and self in _clients_by_port[self.port]:
                 _clients_by_port[self.port].remove(self)
@@ -124,10 +127,18 @@ class MarstekUDPClient:
 
             # Only close the shared transport when last client disconnects
             if _transport_refcounts[self.port] <= 0:
-                self.transport.close()
-                del _shared_transports[self.port]
-                del _shared_protocols[self.port]
-                del _transport_refcounts[self.port]
+                if self.transport:
+                    try:
+                        self.transport.close()
+                    except Exception as err:
+                        _LOGGER.warning("Error closing transport: %s", err)
+
+                if self.port in _shared_transports:
+                    del _shared_transports[self.port]
+                if self.port in _shared_protocols:
+                    del _shared_protocols[self.port]
+                if self.port in _transport_refcounts:
+                    del _transport_refcounts[self.port]
                 if self.port in _clients_by_port:
                     del _clients_by_port[self.port]
                 _LOGGER.debug("Closed shared UDP socket on port %s", self.port)
@@ -137,9 +148,9 @@ class MarstekUDPClient:
                     _transport_refcounts[self.port], self.port
                 )
 
-            self.transport = None
-            self.protocol = None
-            self._connected = False
+        self.transport = None
+        self.protocol = None
+        self._connected = False
 
     def register_handler(self, handler) -> None:
         """Register a message handler."""
