@@ -92,7 +92,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
             if is_first_update:
                 _LOGGER.debug("First update - fetching device info")
                 try:
-                    await asyncio.sleep(0.5)  # Delay before first API call
+                    await asyncio.sleep(1.0)  # Delay before first API call
                     device_info = await self.api.get_device_info()
                     if device_info:
                         data["device"] = device_info
@@ -102,7 +102,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
             # High priority - every update (15s)
             # ES.GetStatus and EM.GetStatus for real-time power/energy data
             try:
-                await asyncio.sleep(0.5)  # Delay between API calls
+                await asyncio.sleep(1.0)  # Delay between API calls
                 es_status = await self.api.get_es_status()
             except Exception as err:
                 _LOGGER.debug("Failed to get ES status: %s", err)
@@ -130,7 +130,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                 data["es"] = es_status
 
             try:
-                await asyncio.sleep(0.5)  # Delay between API calls
+                await asyncio.sleep(1.0)  # Delay between API calls
                 em_status = await self.api.get_em_status()
             except Exception as err:
                 _LOGGER.debug("Failed to get EM status: %s", err)
@@ -143,7 +143,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
             # Battery, PV, Mode - slower-changing data
             if self.update_count % UPDATE_INTERVAL_MEDIUM == 0:
                 try:
-                    await asyncio.sleep(0.5)  # Delay between API calls
+                    await asyncio.sleep(1.0)  # Delay between API calls
                     battery_status = await self.api.get_battery_status()
                     if battery_status:
                         # Scale firmware-dependent values
@@ -162,7 +162,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                 # Only query PV for Venus D
                 if self.device_model == DEVICE_MODEL_VENUS_D:
                     try:
-                        await asyncio.sleep(0.5)  # Delay between API calls
+                        await asyncio.sleep(1.0)  # Delay between API calls
                         pv_status = await self.api.get_pv_status()
                         if pv_status:
                             data["pv"] = pv_status
@@ -170,7 +170,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                         _LOGGER.debug("Failed to get PV status: %s", err)
 
                 try:
-                    await asyncio.sleep(0.5)  # Delay between API calls
+                    await asyncio.sleep(1.0)  # Delay between API calls
                     mode_status = await self.api.get_es_mode()
                     if mode_status:
                         data["mode"] = mode_status
@@ -181,7 +181,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
             # Device, WiFi, BLE - static/diagnostic data
             if self.update_count % UPDATE_INTERVAL_SLOW == 0:
                 try:
-                    await asyncio.sleep(0.5)  # Delay between API calls
+                    await asyncio.sleep(1.0)  # Delay between API calls
                     device_info = await self.api.get_device_info()
                     if device_info:
                         data["device"] = device_info
@@ -189,7 +189,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                     _LOGGER.debug("Failed to get device info: %s", err)
 
                 try:
-                    await asyncio.sleep(0.5)  # Delay between API calls
+                    await asyncio.sleep(1.0)  # Delay between API calls
                     wifi_status = await self.api.get_wifi_status()
                     if wifi_status:
                         data["wifi"] = wifi_status
@@ -197,7 +197,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                     _LOGGER.debug("Failed to get wifi status: %s", err)
 
                 try:
-                    await asyncio.sleep(0.5)  # Delay between API calls
+                    await asyncio.sleep(1.0)  # Delay between API calls
                     ble_status = await self.api.get_ble_status()
                     if ble_status:
                         data["ble"] = ble_status
