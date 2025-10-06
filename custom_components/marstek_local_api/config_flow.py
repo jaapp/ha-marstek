@@ -105,6 +105,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             await coordinator.api.disconnect()
                             paused_clients.append(coordinator.api)
 
+            # Wait a bit for disconnections to complete and sockets to close
+            import asyncio
+            await asyncio.sleep(1)
+
             # Bind to same port as device (required by Marstek protocol)
             api = MarstekUDPClient(self.hass, port=DEFAULT_PORT, remote_port=DEFAULT_PORT)
             try:
@@ -118,6 +122,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await api.disconnect()
                 return await self.async_step_manual()
             finally:
+                # Wait a bit before resuming to ensure discovery socket is fully closed
+                await asyncio.sleep(1)
+
                 # Resume paused clients
                 for client in paused_clients:
                     _LOGGER.debug("Resuming paused API client")
