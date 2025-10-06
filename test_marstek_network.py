@@ -109,12 +109,17 @@ class MarstekTester:
         # Process responses
         devices = []
         for msg, addr in self.responses:
-            if msg.get('id') == 'test-scan' and 'result' in msg:
-                result = msg['result']
-                devices.append((result, addr))
+            print(f"DEBUG: Received message ID: {msg.get('id')}, has result: {'result' in msg}")
+            if msg.get('id') == 'test-scan':
+                if 'result' in msg:
+                    result = msg['result']
+                    devices.append((result, addr))
+                else:
+                    print(f"DEBUG: Message has no 'result' key. Keys: {list(msg.keys())}")
+                    print(f"DEBUG: Full message: {msg}")
 
         if devices:
-            print(f"{'='*80}")
+            print(f"\n{'='*80}")
             print(f"Found {len(devices)} device(s)")
             print(f"{'='*80}\n")
 
@@ -124,7 +129,8 @@ class MarstekTester:
                 print(f"  IP: {result.get('ip', 'unknown')}")
                 print(f"  MAC: {result.get('mac', 'unknown')}")
                 print(f"  Firmware: v{result.get('ver', 'unknown')}")
-                print(f"  Responded from: {addr[0]}:{addr[1]}\n")
+                print(f"  Responded from: {addr[0]}:{addr[1]}")
+                print(f"  DEBUG - Raw result keys: {list(result.keys()) if isinstance(result, dict) else 'not a dict'}\n")
 
                 # Test commands if we have a specific host
                 if host and result.get('ip') == host:
