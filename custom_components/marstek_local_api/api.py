@@ -319,7 +319,12 @@ class MarstekUDPClient:
 
         def handler(message, addr):
             """Handle discovery responses."""
-            if message.get("id") == "homeassistant-discover" and "result" in message:
+            msg_id = message.get("id")
+            has_result = "result" in message
+            _LOGGER.debug("Discovery handler called: id=%s, expected=homeassistant-discover, match=%s, has_result=%s",
+                         msg_id, msg_id == "homeassistant-discover", has_result)
+
+            if msg_id == "homeassistant-discover" and has_result:
                 result = message["result"]
                 mac = result.get("wifi_mac")
 
