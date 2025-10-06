@@ -56,8 +56,13 @@ class MarstekTester:
                     try:
                         msg = json.loads(data.decode())
                         print(f"  ← Response from {addr[0]}:{addr[1]}")
+                        if len(str(msg)) < 200:
+                            print(f"     Data: {msg}")
+                        else:
+                            print(f"     Data: {str(msg)[:200]}...")
                         self.tester.responses.append((msg, addr))
-                    except:
+                    except Exception as e:
+                        print(f"  ← Invalid data from {addr[0]}:{addr[1]}: {e}")
                         pass
 
             self.transport, self.protocol = await loop.create_datagram_endpoint(
