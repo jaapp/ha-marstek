@@ -118,8 +118,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
                 _LOGGER.info("Discovered %d device(s): %s", len(self._discovered_devices), self._discovered_devices)
             except Exception as err:
-                _LOGGER.error("Discovery failed: %s", err)
-                await api.disconnect()
+                _LOGGER.error("Discovery failed: %s", err, exc_info=True)
+                try:
+                    await api.disconnect()
+                except Exception:
+                    pass  # Ignore disconnect errors
                 return await self.async_step_manual()
             finally:
                 # Wait a bit before resuming to ensure discovery socket is fully closed
@@ -127,8 +130,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
                 # Resume paused clients
                 for client in paused_clients:
-                    _LOGGER.debug("Resuming paused API client")
-                    await client.connect()
+                    try:
+                        _LOGGER.debug("Resuming paused API client for host %s", client.host)
+                        await client.connect()
+                    except Exception as err:
+                        _LOGGER.warning("Failed to resume client for host %s: %s", client.host, err)
 
             if not self._discovered_devices:
                 # No devices found, offer manual entry
