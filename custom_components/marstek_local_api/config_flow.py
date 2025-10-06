@@ -85,8 +85,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is None:
             # Perform discovery
-            # Bind to same port as device (required by Marstek protocol)
-            api = MarstekUDPClient(self.hass, port=DEFAULT_PORT, remote_port=DEFAULT_PORT)
+            # Use ephemeral port (0) to avoid conflicts with already-configured devices
+            api = MarstekUDPClient(self.hass, port=0, remote_port=DEFAULT_PORT)
             try:
                 await api.connect()
                 self._discovered_devices = await api.discover_devices()
