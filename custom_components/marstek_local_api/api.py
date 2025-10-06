@@ -323,16 +323,20 @@ class MarstekUDPClient:
                 result = message["result"]
                 mac = result.get("wifi_mac")
 
+                _LOGGER.debug("Discovery response: mac=%s, ip=%s, already_discovered=%s", mac, addr[0], mac in discovered_macs)
+
                 if mac and mac not in discovered_macs:
                     discovered_macs.add(mac)
-                    devices.append({
+                    device = {
                         "name": result.get("device", "Unknown"),
                         "ip": addr[0],
                         "mac": mac,
                         "firmware": result.get("ver", 0),
                         "ble_mac": result.get("ble_mac"),
                         "wifi_name": result.get("wifi_name"),
-                    })
+                    }
+                    devices.append(device)
+                    _LOGGER.info("Added discovered device: %s", device)
 
         # Register handler
         self.register_handler(handler)
