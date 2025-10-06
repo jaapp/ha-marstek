@@ -52,9 +52,10 @@ class MarstekOperatingModeSelect(CoordinatorEntity, SelectEntity):
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.data['mac']}_operating_mode_select"
         self._attr_name = "Operating Mode"
+        mac_suffix = entry.data["mac"].replace(":", "")[-4:].upper()
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.data["mac"])},
-            name=f"Marstek {entry.data['device']}",
+            name=f"Marstek {entry.data['device']} {mac_suffix}",
             manufacturer="Marstek",
             model=entry.data["device"],
             sw_version=str(entry.data.get("firmware", "Unknown")),
