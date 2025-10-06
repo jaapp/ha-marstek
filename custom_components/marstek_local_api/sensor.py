@@ -366,12 +366,10 @@ class MarstekSensor(CoordinatorEntity, SensorEntity):
         """Initialize the sensor."""
         super().__init__(coordinator)
         self.entity_description = entity_description
-        mac_suffix = entry.data["mac"].replace(":", "")[-4:].upper()
         self._attr_unique_id = f"{entry.data['mac']}_{entity_description.key}"
-        self._attr_name = f"{entity_description.name} {mac_suffix}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.data["mac"])},
-            name=f"Marstek {entry.data['device']} {mac_suffix}",
+            name=f"Marstek {entry.data['device']}",
             manufacturer="Marstek",
             model=entry.data["device"],
             sw_version=str(entry.data.get("firmware", "Unknown")),
