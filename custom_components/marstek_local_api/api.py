@@ -364,8 +364,13 @@ class MarstekUDPClient:
                         )
                 await asyncio.sleep(DISCOVERY_BROADCAST_INTERVAL)
 
+            # Wait a bit longer for any delayed responses
+            _LOGGER.debug("Waiting for delayed responses...")
+            await asyncio.sleep(2)
+
         finally:
             self.unregister_handler(handler)
+            _LOGGER.info("Discovery complete - found %d device(s)", len(devices))
 
         return devices
 
