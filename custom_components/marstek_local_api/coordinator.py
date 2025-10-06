@@ -85,7 +85,8 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from API with tiered polling strategy."""
         try:
-            data = {}
+            # Start with previous data to preserve values on partial failures
+            data = dict(self.data) if self.data else {}
 
             # On first update, always get device info for initial setup
             is_first_update = self.data is None or not self.data
@@ -207,15 +208,17 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
             # Increment update counter
             self.update_count += 1
 
-            # If we got no data at all, raise an error
-            # On first update, be more lenient - just log a warning
-            if not data:
-                if is_first_update:
-                    raise UpdateFailed("No response from device - check network connectivity")
-                raise UpdateFailed("No data received from device")
+            # Only fail on first update if we got absolutely nothing
+            if is_first_update and not data:
+                raise UpdateFailed("No response from device - check network connectivity")
 
-            # Update last message timestamp (Design Doc §556-576)
-            self.last_message_timestamp = time.time()
+            # If we got any new data, update the last message timestamp
+            # (We compare with the preserved old data to see if anything changed)
+            if data != self.data:
+                self.last_message_timestamp = time.time()
+                _LOGGER.debug("Updated data - at least one API call succeeded")
+            else:
+                _LOGGER.debug("No new data this update - all API calls may have timed out, keeping old values")
 
             # Add diagnostic data (will be recalculated on sensor access)
             data["_diagnostic"] = {
