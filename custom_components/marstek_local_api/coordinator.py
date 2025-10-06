@@ -228,6 +228,16 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
             return data
 
         except MarstekAPIError as err:
-            raise UpdateFailed(f"Error communicating with API: {err}") from err
+            # Only fail if this is the first update (no existing data to preserve)
+            if is_first_update:
+                raise UpdateFailed(f"Error communicating with API: {err}") from err
+            # Otherwise log and return preserved data
+            _LOGGER.warning("API error during update, keeping old values: %s", err)
+            return self.data if self.data else {}
         except Exception as err:
-            raise UpdateFailed(f"Unexpected error: {err}") from err
+            # Only fail if this is the first update (no existing data to preserve)
+            if is_first_update:
+                raise UpdateFailed(f"Unexpected error: {err}") from err
+            # Otherwise log and return preserved data
+            _LOGGER.error("Unexpected error during update, keeping old values: %s", err, exc_info=True)
+            return self.data if self.data else {}
