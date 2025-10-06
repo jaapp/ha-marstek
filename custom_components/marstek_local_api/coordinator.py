@@ -23,6 +23,199 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
+class MarstekMultiDeviceCoordinator(DataUpdateCoordinator):
+    """Class to manage fetching data from multiple Marstek devices."""
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        devices: list[dict[str, Any]],
+        scan_interval: int = DEFAULT_SCAN_INTERVAL,
+    ) -> None:
+        """Initialize the multi-device coordinator."""
+        self.devices = devices
+        self.device_coordinators: dict[str, MarstekDataUpdateCoordinator] = {}
+        self.update_count = 1
+
+        super().__init__(
+            hass,
+            _LOGGER,
+            name="Marstek System",
+            update_interval=timedelta(seconds=scan_interval),
+        )
+
+    async def async_setup(self) -> None:
+        """Set up individual device coordinators."""
+        for device_data in self.devices:
+            mac = device_data["mac"]
+
+            # Create API client for this device
+            api = MarstekUDPClient(
+                self.hass,
+                host=device_data["host"],
+                port=device_data["port"],
+                remote_port=device_data["port"],
+            )
+
+            try:
+                await api.connect()
+            except Exception as err:
+                _LOGGER.error("Failed to connect to device %s: %s", mac, err)
+                continue
+
+            # Create coordinator for this device
+            coordinator = MarstekDataUpdateCoordinator(
+                self.hass,
+                api,
+                device_name=device_data.get("device", "Marstek Device"),
+                firmware_version=device_data.get("firmware", 0),
+                device_model=device_data.get("device", ""),
+                scan_interval=self.update_interval.total_seconds(),
+            )
+
+            self.device_coordinators[mac] = coordinator
+
+    def get_device_macs(self) -> list[str]:
+        """Get list of device MACs."""
+        return list(self.device_coordinators.keys())
+
+    def get_device_data(self, mac: str) -> dict[str, Any]:
+        """Get data for a specific device."""
+        if mac in self.device_coordinators:
+            return self.device_coordinators[mac].data or {}
+        return {}
+
+    def _calculate_aggregates(self) -> dict[str, Any]:
+        """Calculate aggregate values across all devices."""
+        aggregates = {}
+
+        # Collect data from all devices
+        all_device_data = []
+        for mac, coordinator in self.device_coordinators.items():
+            if coordinator.data:
+                all_device_data.append(coordinator.data)
+
+        if not all_device_data:
+            return aggregates
+
+        # Power aggregates
+        total_power = sum(
+            d.get("es", {}).get("bat_power", 0) or 0
+            for d in all_device_data
+        )
+        aggregates["total_battery_power"] = total_power
+        aggregates["total_power_in"] = sum(
+            max(0, d.get("es", {}).get("bat_power", 0) or 0)
+            for d in all_device_data
+        )
+        aggregates["total_power_out"] = sum(
+            max(0, -(d.get("es", {}).get("bat_power", 0) or 0))
+            for d in all_device_data
+        )
+
+        # Capacity aggregates
+        aggregates["total_rated_capacity"] = sum(
+            d.get("battery", {}).get("rated_capacity", 0) or 0
+            for d in all_device_data
+        )
+        aggregates["total_remaining_capacity"] = sum(
+            d.get("battery", {}).get("bat_capacity", 0) or 0
+            for d in all_device_data
+        )
+
+        # Calculate weighted average SOC
+        total_capacity = aggregates["total_rated_capacity"]
+        if total_capacity > 0:
+            weighted_soc = sum(
+                (d.get("battery", {}).get("soc", 0) or 0) *
+                (d.get("battery", {}).get("rated_capacity", 0) or 0)
+                for d in all_device_data
+            )
+            aggregates["average_soc"] = weighted_soc / total_capacity
+        else:
+            aggregates["average_soc"] = None
+
+        # Available capacity
+        if total_capacity > 0 and aggregates["average_soc"] is not None:
+            aggregates["total_available_capacity"] = (
+                (100 - aggregates["average_soc"]) * total_capacity / 100
+            )
+        else:
+            aggregates["total_available_capacity"] = None
+
+        # Combined state
+        power_values = [
+            d.get("es", {}).get("bat_power", 0) or 0
+            for d in all_device_data
+        ]
+        charging = [p > 0 for p in power_values]
+        discharging = [p < 0 for p in power_values]
+
+        if all(charging):
+            aggregates["combined_state"] = "charging"
+        elif all(discharging):
+            aggregates["combined_state"] = "discharging"
+        elif any(charging) or any(discharging):
+            aggregates["combined_state"] = "mixed"
+        else:
+            aggregates["combined_state"] = "idle"
+
+        # Energy aggregates
+        aggregates["total_pv_energy"] = sum(
+            d.get("es", {}).get("total_pv_energy", 0) or 0
+            for d in all_device_data
+        )
+        aggregates["total_grid_import"] = sum(
+            d.get("es", {}).get("total_grid_input_energy", 0) or 0
+            for d in all_device_data
+        )
+        aggregates["total_grid_export"] = sum(
+            d.get("es", {}).get("total_grid_output_energy", 0) or 0
+            for d in all_device_data
+        )
+        aggregates["total_load_energy"] = sum(
+            d.get("es", {}).get("total_load_energy", 0) or 0
+            for d in all_device_data
+        )
+        aggregates["total_solar_power"] = sum(
+            d.get("es", {}).get("pv_power", 0) or 0
+            for d in all_device_data
+        )
+        aggregates["total_grid_power"] = sum(
+            d.get("es", {}).get("ongrid_power", 0) or 0
+            for d in all_device_data
+        )
+        aggregates["total_offgrid_power"] = sum(
+            d.get("es", {}).get("offgrid_power", 0) or 0
+            for d in all_device_data
+        )
+
+        return aggregates
+
+    async def _async_update_data(self) -> dict[str, Any]:
+        """Update data from all devices."""
+        # Update all device coordinators in parallel
+        update_tasks = []
+        for coordinator in self.device_coordinators.values():
+            update_tasks.append(coordinator._async_update_data())
+
+        try:
+            await asyncio.gather(*update_tasks, return_exceptions=True)
+        except Exception as err:
+            _LOGGER.error("Error updating devices: %s", err)
+
+        # Build combined data structure
+        data = {
+            "devices": {
+                mac: coordinator.data
+                for mac, coordinator in self.device_coordinators.items()
+            },
+            "aggregates": self._calculate_aggregates(),
+        }
+
+        return data
+
+
 class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
     """Class to manage fetching Marstek data from the device."""
 

@@ -119,6 +119,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             # Build list of discovered devices
             devices_list = {}
+
+            # Add "All devices" option if multiple devices found
+            if len(self._discovered_devices) > 1:
+                devices_list["__all__"] = f"All devices ({len(self._discovered_devices)} batteries)"
+
             for device in self._discovered_devices:
                 mac = device["mac"]
                 # Show all devices, the abort happens when user selects one already configured
@@ -146,7 +151,33 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if selected == "manual":
             return await self.async_step_manual()
 
-        # Find selected device
+        # Check if user selected "All devices"
+        if selected == "__all__":
+            # Create multi-device entry
+            # Use a synthetic unique ID based on all MACs
+            all_macs = sorted([d["mac"] for d in self._discovered_devices])
+            unique_id = "_".join(all_macs)
+
+            await self.async_set_unique_id(unique_id)
+            self._abort_if_unique_id_configured()
+
+            return self.async_create_entry(
+                title=f"Marstek System ({len(self._discovered_devices)} batteries)",
+                data={
+                    "devices": [
+                        {
+                            CONF_HOST: d["ip"],
+                            CONF_PORT: DEFAULT_PORT,
+                            "mac": d["mac"],
+                            "device": d["name"],
+                            "firmware": d["firmware"],
+                        }
+                        for d in self._discovered_devices
+                    ],
+                },
+            )
+
+        # Find selected device (single device mode)
         device = next(
             (d for d in self._discovered_devices if d["mac"] == selected), None
         )
@@ -159,7 +190,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         await self.async_set_unique_id(device["mac"])
         self._abort_if_unique_id_configured()
 
-        # Create entry
+        # Create entry for single device
         return self.async_create_entry(
             title=f"{device['name']} ({device['ip']})",
             data={

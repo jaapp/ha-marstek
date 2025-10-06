@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 
 from .api import MarstekUDPClient
 from .const import CONF_PORT, DATA_COORDINATOR, DEFAULT_SCAN_INTERVAL, DOMAIN
-from .coordinator import MarstekDataUpdateCoordinator
+from .coordinator import MarstekDataUpdateCoordinator, MarstekMultiDeviceCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -20,38 +20,60 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Marstek Local API from a config entry."""
     hass.data.setdefault(DOMAIN, {})
 
-    # Create API client
-    # Bind to same port as device (required by Marstek protocol)
-    # Use reuse_port to allow multiple instances
-    api = MarstekUDPClient(
-        hass,
-        host=entry.data[CONF_HOST],
-        port=entry.data[CONF_PORT],  # Bind to device port (with reuse_port)
-        remote_port=entry.data[CONF_PORT],  # Send to device port
-    )
-
-    # Connect to device
-    try:
-        await api.connect()
-    except Exception as err:
-        _LOGGER.error("Failed to connect to Marstek device: %s", err)
-        return False
-
     # Get scan interval from options (Design Doc §297-302)
     scan_interval = entry.options.get("scan_interval", DEFAULT_SCAN_INTERVAL)
 
-    # Create coordinator
-    coordinator = MarstekDataUpdateCoordinator(
-        hass,
-        api,
-        device_name=entry.data.get("device", "Marstek Device"),
-        firmware_version=entry.data.get("firmware", 0),
-        device_model=entry.data.get("device", ""),
-        scan_interval=scan_interval,
-    )
+    # Check if this is a multi-device or single-device entry
+    if "devices" in entry.data:
+        # Multi-device mode
+        _LOGGER.info("Setting up multi-device entry with %d devices", len(entry.data["devices"]))
 
-    # Fetch initial data
-    await coordinator.async_config_entry_first_refresh()
+        # Create multi-device coordinator
+        coordinator = MarstekMultiDeviceCoordinator(
+            hass,
+            devices=entry.data["devices"],
+            scan_interval=scan_interval,
+        )
+
+        # Set up device coordinators
+        await coordinator.async_setup()
+
+        # Fetch initial data
+        await coordinator.async_config_entry_first_refresh()
+
+    else:
+        # Single device mode (legacy/backwards compatibility)
+        _LOGGER.info("Setting up single-device entry")
+
+        # Create API client
+        # Bind to same port as device (required by Marstek protocol)
+        # Use reuse_port to allow multiple instances
+        api = MarstekUDPClient(
+            hass,
+            host=entry.data[CONF_HOST],
+            port=entry.data[CONF_PORT],  # Bind to device port (with reuse_port)
+            remote_port=entry.data[CONF_PORT],  # Send to device port
+        )
+
+        # Connect to device
+        try:
+            await api.connect()
+        except Exception as err:
+            _LOGGER.error("Failed to connect to Marstek device: %s", err)
+            return False
+
+        # Create coordinator
+        coordinator = MarstekDataUpdateCoordinator(
+            hass,
+            api,
+            device_name=entry.data.get("device", "Marstek Device"),
+            firmware_version=entry.data.get("firmware", 0),
+            device_model=entry.data.get("device", ""),
+            scan_interval=scan_interval,
+        )
+
+        # Fetch initial data
+        await coordinator.async_config_entry_first_refresh()
 
     # Store coordinator
     hass.data[DOMAIN][entry.entry_id] = {
@@ -78,9 +100,16 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     if unload_ok:
-        # Disconnect API
+        # Disconnect API(s)
         coordinator = hass.data[DOMAIN][entry.entry_id][DATA_COORDINATOR]
-        await coordinator.api.disconnect()
+
+        if isinstance(coordinator, MarstekMultiDeviceCoordinator):
+            # Disconnect all device APIs
+            for device_coordinator in coordinator.device_coordinators.values():
+                await device_coordinator.api.disconnect()
+        else:
+            # Single device coordinator
+            await coordinator.api.disconnect()
 
         # Remove entry from domain data
         hass.data[DOMAIN].pop(entry.entry_id)
