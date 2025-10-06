@@ -379,7 +379,7 @@ class MarstekUDPClient:
     async def discover_devices(self, timeout: int = DISCOVERY_TIMEOUT) -> list[dict]:
         """Discover Marstek devices on the network."""
         devices = []
-        discovered_macs = set()
+        discovered_ips = set()  # Use IP as unique identifier instead of MAC
 
         def handler(message, addr):
             """Handle discovery responses."""
@@ -390,18 +390,24 @@ class MarstekUDPClient:
 
             if msg_id == "homeassistant-discover" and has_result:
                 result = message["result"]
-                mac = result.get("wifi_mac")
+                wifi_mac = result.get("wifi_mac")
+                ble_mac = result.get("ble_mac")
+                ip = addr[0]
 
-                _LOGGER.debug("Discovery response: mac=%s, ip=%s, already_discovered=%s", mac, addr[0], mac in discovered_macs)
+                _LOGGER.debug("Discovery response: wifi_mac=%s, ble_mac=%s, ip=%s, already_discovered=%s",
+                             wifi_mac, ble_mac, ip, ip in discovered_ips)
 
-                if mac and mac not in discovered_macs:
-                    discovered_macs.add(mac)
+                # Use IP as unique identifier (multiple batteries may share wifi_mac)
+                if ip and ip not in discovered_ips:
+                    discovered_ips.add(ip)
+                    # Use BLE MAC as the unique device identifier (more unique than wifi_mac)
                     device = {
                         "name": result.get("device", "Unknown"),
-                        "ip": addr[0],
-                        "mac": mac,
+                        "ip": ip,
+                        "mac": ble_mac if ble_mac else wifi_mac,  # Prefer BLE MAC
                         "firmware": result.get("ver", 0),
-                        "ble_mac": result.get("ble_mac"),
+                        "ble_mac": ble_mac,
+                        "wifi_mac": wifi_mac,
                         "wifi_name": result.get("wifi_name"),
                     }
                     devices.append(device)
