@@ -2,7 +2,11 @@
 """Basic UDP network test - no dependencies on HA modules.
 
 Run this on your HA device to test UDP broadcast capability.
-Usage: python3 test_udp_basic.py
+
+Usage:
+  python3 test_udp_basic.py                    # Auto-discovery via broadcast
+  python3 test_udp_basic.py 192.168.7.101      # Test specific IP address
+  python3 test_udp_basic.py 192.168.7.101 30000  # Custom port
 """
 
 import asyncio
@@ -18,13 +22,16 @@ class UDPTester:
         self.protocol = None
         self.responses = []
 
-    async def test_discovery(self, port=30000, timeout=10):
-        """Test UDP broadcast discovery."""
+    async def test_discovery(self, host=None, port=30000, timeout=10):
+        """Test UDP discovery (broadcast or direct)."""
         print(f"\n{'='*80}")
         print(f"UDP Network Diagnostic Test")
         print(f"{'='*80}\n")
 
         print(f"Test Parameters:")
+        print(f"  Mode: {'Direct IP' if host else 'Broadcast Discovery'}")
+        if host:
+            print(f"  Target Host: {host}")
         print(f"  Port: {port}")
         print(f"  Timeout: {timeout}s")
         print(f"  Time: {datetime.now()}\n")
@@ -81,16 +88,23 @@ class UDPTester:
             traceback.print_exc()
             return False
 
-        # Test broadcast addresses
-        print(f"Step 2: Testing broadcast addresses...")
-        broadcast_addrs = self._get_broadcast_addresses()
-        print(f"  Found {len(broadcast_addrs)} broadcast address(es):")
-        for addr in broadcast_addrs:
-            print(f"    - {addr}")
-        print()
+        # Determine target addresses
+        if host:
+            # Direct IP mode
+            print(f"Step 2: Using direct IP address...")
+            target_addrs = [host]
+            print(f"  Target: {host}\n")
+        else:
+            # Broadcast discovery mode
+            print(f"Step 2: Testing broadcast addresses...")
+            target_addrs = self._get_broadcast_addresses()
+            print(f"  Found {len(target_addrs)} broadcast address(es):")
+            for addr in target_addrs:
+                print(f"    - {addr}")
+            print()
 
-        # Send discovery broadcasts
-        print(f"Step 3: Sending discovery broadcasts...")
+        # Send discovery messages
+        print(f"Step 3: Sending discovery messages...")
         discovery_msg = {
             "id": "test-discovery",
             "method": "Marstek.Scan",
@@ -98,7 +112,7 @@ class UDPTester:
         }
         msg_str = json.dumps(discovery_msg)
 
-        for addr in broadcast_addrs:
+        for addr in target_addrs:
             try:
                 self.transport.sendto(msg_str.encode(), (addr, port))
                 print(f"  ✅ Sent to {addr}:{port}")
@@ -115,6 +129,7 @@ class UDPTester:
 
         if self.responses:
             print(f"✅ Found {len(self.responses)} device(s):\n")
+            devices = []
             for msg, addr in self.responses:
                 result = msg.get('result', {})
                 print(f"Device from {addr[0]}:{addr[1]}:")
@@ -123,6 +138,16 @@ class UDPTester:
                 print(f"  MAC: {result.get('mac', 'unknown')}")
                 print(f"  Firmware: v{result.get('ver', 'unknown')}")
                 print()
+                if result.get('ip'):
+                    devices.append(result.get('ip'))
+
+            # If we found devices, test API commands
+            if devices and host:
+                print(f"{'='*80}")
+                print(f"Testing API Commands on {host}")
+                print(f"{'='*80}\n")
+                await self.test_commands(host, port)
+
             return True
         else:
             print(f"❌ No devices found\n")
@@ -134,6 +159,50 @@ class UDPTester:
             print(f"  5. Network doesn't support broadcast")
             print(f"  6. Wrong broadcast address calculation\n")
             return False
+
+    async def test_commands(self, host, port, timeout=5):
+        """Test actual API commands."""
+        commands = [
+            ("Marstek.GetDevice", "Device Info"),
+            ("ES.GetStatus", "Energy System Status"),
+            ("Bat.GetStatus", "Battery Status"),
+        ]
+
+        for method, description in commands:
+            print(f"Testing {description} ({method})...")
+            msg_id = f"test-{method.lower().replace('.', '-')}"
+            payload = {
+                "id": msg_id,
+                "method": method,
+                "params": {"id": 0}
+            }
+
+            # Clear previous responses
+            self.responses.clear()
+
+            # Send command
+            self.transport.sendto(json.dumps(payload).encode(), (host, port))
+
+            # Wait for response
+            await asyncio.sleep(timeout)
+
+            # Check response
+            found = False
+            for msg, addr in self.responses:
+                if msg.get('id') == msg_id and 'result' in msg:
+                    print(f"  ✅ Success - received response")
+                    result = msg.get('result', {})
+                    # Show a sample of the data
+                    if isinstance(result, dict):
+                        keys = list(result.keys())[:5]
+                        print(f"     Data keys: {', '.join(keys)}{' ...' if len(result) > 5 else ''}")
+                    found = True
+                    break
+
+            if not found:
+                print(f"  ❌ No response or error")
+
+            print()
 
     def _get_broadcast_addresses(self):
         """Get broadcast addresses using multiple methods."""
@@ -196,9 +265,23 @@ class UDPTester:
 
 
 async def main():
+    # Parse command line arguments
+    host = None
+    port = 30000
+
+    if len(sys.argv) > 1:
+        host = sys.argv[1]
+        if len(sys.argv) > 2:
+            try:
+                port = int(sys.argv[2])
+            except ValueError:
+                print(f"Error: Invalid port number '{sys.argv[2]}'")
+                print(f"Usage: {sys.argv[0]} [host] [port]")
+                sys.exit(1)
+
     tester = UDPTester()
     try:
-        success = await tester.test_discovery()
+        success = await tester.test_discovery(host=host, port=port)
         sys.exit(0 if success else 1)
     except KeyboardInterrupt:
         print("\n\nTest interrupted by user")
