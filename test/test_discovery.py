@@ -3,6 +3,10 @@
 
 Tests the integration components using actual integration code.
 No logic duplication - imports and uses integration modules directly.
+
+Usage:
+  python3 test_discovery.py              # Auto-discovery
+  python3 test_discovery.py 192.168.7.101  # Test specific IP
 """
 
 import asyncio
@@ -24,7 +28,7 @@ def load_module_from_file(module_name: str, file_path: Path):
     return module
 
 
-# Get paths to integration modules
+# Get paths to integration modules - always relative to this script
 integration_path = Path(__file__).parent.parent / "custom_components" / "marstek_local_api"
 
 # Create a fake package structure to allow relative imports
