@@ -92,15 +92,21 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._discovered_devices = await api.discover_devices()
                 await api.disconnect()
 
+                _LOGGER.info("Discovered %d device(s): %s", len(self._discovered_devices), self._discovered_devices)
+
                 if not self._discovered_devices:
                     # No devices found, offer manual entry
                     return await self.async_step_manual()
 
                 # Build list of discovered devices
-                devices_list = {
-                    device["mac"]: f"{device['name']} ({device['ip']})"
-                    for device in self._discovered_devices
-                }
+                devices_list = {}
+                for device in self._discovered_devices:
+                    mac = device["mac"]
+                    # Show all devices, the abort happens when user selects one already configured
+                    devices_list[mac] = f"{device['name']} ({device['ip']})"
+                    _LOGGER.debug("Adding device to list: %s (%s) MAC: %s", device['name'], device['ip'], mac)
+
+                _LOGGER.info("Built device list with %d device(s)", len(devices_list))
 
                 # Add manual entry option
                 devices_list["manual"] = "Manual IP entry"
