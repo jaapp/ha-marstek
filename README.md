@@ -276,12 +276,56 @@ What's missing:
 - Check network connectivity
 - Ensure only one integration instance per device
 
-### No Data Updates
+### No Data Updates / Sensors Show "Unavailable"
 
 - Check that the device is powered on
 - Verify network connection
 - Check Home Assistant logs for errors
 - Try removing and re-adding the integration
+- Enable debug logging (see below) to diagnose network issues
+- Run the network diagnostic test (see below)
+
+### Enable Debug Logging
+
+To get detailed diagnostic information, add the following to your `configuration.yaml`:
+
+```yaml
+logger:
+  default: info
+  logs:
+    custom_components.marstek_local_api: debug
+    custom_components.marstek_local_api.api: debug
+    custom_components.marstek_local_api.coordinator: debug
+```
+
+Then restart Home Assistant and check **Settings → System → Logs** for detailed debug output.
+
+Debug logs will show:
+- UDP socket connection details
+- Command payloads being sent
+- Responses received from the device
+- Network errors and timeouts
+- Handler registration and message routing
+
+### Network Diagnostic Test
+
+The integration includes a standalone network test script that you can run directly on your Home Assistant device:
+
+```bash
+# SSH into your Home Assistant instance
+cd /config/custom_components/marstek_local_api
+
+# Run the network test
+python3 test_network.py
+```
+
+This test will:
+- Discover devices on your network
+- Test all API commands
+- Display detailed network communication
+- Help identify connectivity issues
+
+The test script uses the same code as the integration, so if it works here but fails in HA, the issue is likely related to HA's networking environment.
 
 ## Support
 

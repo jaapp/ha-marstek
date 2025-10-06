@@ -51,20 +51,37 @@ class MarstekUDPClient:
     async def connect(self) -> None:
         """Connect to the UDP socket."""
         if self._connected and self.transport:
+            _LOGGER.debug("Already connected on port %s", self.port)
             return
 
         loop = asyncio.get_event_loop()
 
-        # Create UDP endpoint with port reuse to allow multiple instances
-        self.transport, self.protocol = await loop.create_datagram_endpoint(
-            lambda: MarstekProtocol(self),
-            local_addr=("0.0.0.0", self.port),
-            allow_broadcast=True,
-            reuse_port=True,  # Allow multiple binds to same port
+        _LOGGER.info(
+            "Connecting UDP socket: local_port=%s, remote_host=%s, remote_port=%s",
+            self.port, self.host or "broadcast", self.remote_port
         )
 
-        self._connected = True
-        _LOGGER.debug("UDP socket connected on port %s", self.port)
+        try:
+            # Create UDP endpoint with port reuse to allow multiple instances
+            self.transport, self.protocol = await loop.create_datagram_endpoint(
+                lambda: MarstekProtocol(self),
+                local_addr=("0.0.0.0", self.port),
+                allow_broadcast=True,
+                reuse_port=True,  # Allow multiple binds to same port
+            )
+
+            self._connected = True
+            sock = self.transport.get_extra_info('socket')
+            _LOGGER.info(
+                "UDP socket connected: local_port=%s, socket=%s",
+                self.port, sock.getsockname() if sock else "unknown"
+            )
+        except Exception as err:
+            _LOGGER.error(
+                "Failed to connect UDP socket on port %s: %s",
+                self.port, err, exc_info=True
+            )
+            raise
 
     async def disconnect(self) -> None:
         """Disconnect from the UDP socket."""
@@ -89,20 +106,27 @@ class MarstekUDPClient:
         """Handle incoming UDP message."""
         try:
             message = json.loads(data.decode())
-            _LOGGER.debug("Received message from %s: %s", addr, message)
+            _LOGGER.debug(
+                "Received UDP message from %s:%s (size=%d bytes): %s",
+                addr[0], addr[1], len(data), message
+            )
 
             # Call all registered handlers
+            handlers_called = 0
             for handler in self._handlers:
                 try:
                     # Handler can be sync or async
                     result = handler(message, addr)
                     if asyncio.iscoroutine(result):
                         await result
+                    handlers_called += 1
                 except Exception as err:
-                    _LOGGER.error("Error in message handler: %s", err)
+                    _LOGGER.error("Error in message handler: %s", err, exc_info=True)
+
+            _LOGGER.debug("Called %d handler(s) for message from %s", handlers_called, addr[0])
 
         except json.JSONDecodeError as err:
-            _LOGGER.error("Failed to decode JSON message: %s", err)
+            _LOGGER.error("Failed to decode JSON message from %s: %s (data: %s)", addr, err, data[:200])
 
     async def send_command(
         self,
@@ -125,6 +149,11 @@ class MarstekUDPClient:
             "params": params,
         }
 
+        _LOGGER.debug(
+            "Sending command: method=%s, id=%s, host=%s, port=%s, transport=%s",
+            method, msg_id, self.host, self.remote_port, self.transport is not None
+        )
+
         # Create event for response
         response_event = asyncio.Event()
         response_data = {}
@@ -133,7 +162,9 @@ class MarstekUDPClient:
             """Handle command response."""
             if message.get("id") == msg_id:
                 if self.host and addr[0] != self.host:
+                    _LOGGER.debug("Ignoring response from wrong host: %s (expected %s)", addr[0], self.host)
                     return  # Wrong device
+                _LOGGER.debug("Matched response for %s from %s", method, addr)
                 response_data.update(message)
                 response_event.set()
 
@@ -142,7 +173,9 @@ class MarstekUDPClient:
 
         try:
             # Send command
-            await self._send_to_host(json.dumps(payload))
+            payload_str = json.dumps(payload)
+            _LOGGER.debug("Sending payload to %s:%s: %s", self.host or "broadcast", self.remote_port, payload_str)
+            await self._send_to_host(payload_str)
 
             # Wait for response
             await asyncio.wait_for(response_event.wait(), timeout=timeout)
@@ -153,11 +186,21 @@ class MarstekUDPClient:
                     f"API error {error.get('code')}: {error.get('message')}"
                 )
 
+            _LOGGER.debug("Command %s completed successfully", method)
             return response_data.get("result")
 
         except asyncio.TimeoutError:
-            _LOGGER.warning("Command %s timed out after %ss", method, timeout)
+            _LOGGER.warning(
+                "Command %s timed out after %ss (host=%s, transport=%s, connected=%s)",
+                method, timeout, self.host, self.transport is not None, self._connected
+            )
             return None
+        except Exception as err:
+            _LOGGER.error(
+                "Error sending command %s to %s: %s",
+                method, self.host, err, exc_info=True
+            )
+            raise
         finally:
             self.unregister_handler(handler)
 
