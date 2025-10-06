@@ -103,43 +103,42 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await api.disconnect()
 
                 _LOGGER.info("Discovered %d device(s): %s", len(self._discovered_devices), self._discovered_devices)
+            except Exception as err:
+                _LOGGER.error("Discovery failed: %s", err)
+                await api.disconnect()
+                return await self.async_step_manual()
             finally:
                 # Resume paused clients
                 for client in paused_clients:
                     _LOGGER.debug("Resuming paused API client")
                     await client.connect()
 
-                if not self._discovered_devices:
-                    # No devices found, offer manual entry
-                    return await self.async_step_manual()
-
-                # Build list of discovered devices
-                devices_list = {}
-                for device in self._discovered_devices:
-                    mac = device["mac"]
-                    # Show all devices, the abort happens when user selects one already configured
-                    devices_list[mac] = f"{device['name']} ({device['ip']})"
-                    _LOGGER.debug("Adding device to list: %s (%s) MAC: %s", device['name'], device['ip'], mac)
-
-                _LOGGER.info("Built device list with %d device(s)", len(devices_list))
-
-                # Add manual entry option
-                devices_list["manual"] = "Manual IP entry"
-
-                return self.async_show_form(
-                    step_id="discovery",
-                    data_schema=vol.Schema(
-                        {
-                            vol.Required("device"): vol.In(devices_list),
-                        }
-                    ),
-                    errors=errors,
-                )
-
-            except Exception as err:
-                _LOGGER.error("Discovery failed: %s", err)
-                await api.disconnect()
+            if not self._discovered_devices:
+                # No devices found, offer manual entry
                 return await self.async_step_manual()
+
+            # Build list of discovered devices
+            devices_list = {}
+            for device in self._discovered_devices:
+                mac = device["mac"]
+                # Show all devices, the abort happens when user selects one already configured
+                devices_list[mac] = f"{device['name']} ({device['ip']})"
+                _LOGGER.debug("Adding device to list: %s (%s) MAC: %s", device['name'], device['ip'], mac)
+
+            _LOGGER.info("Built device list with %d device(s)", len(devices_list))
+
+            # Add manual entry option
+            devices_list["manual"] = "Manual IP entry"
+
+            return self.async_show_form(
+                step_id="discovery",
+                data_schema=vol.Schema(
+                    {
+                        vol.Required("device"): vol.In(devices_list),
+                    }
+                ),
+                errors=errors,
+            )
 
         # User selected a device
         selected = user_input["device"]
