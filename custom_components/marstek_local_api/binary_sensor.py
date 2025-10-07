@@ -139,10 +139,11 @@ class MarstekBinarySensor(CoordinatorEntity, BinarySensorEntity):
 
     @property
     def available(self) -> bool:
-        """Return if entity is available."""
+        """Return if entity is available - keep sensors available if we have data."""
         if self.entity_description.available_fn:
             return self.entity_description.available_fn(self.coordinator.data)
-        return super().available
+        # Keep entity available if we have any data at all (prevents "unknown" on transient failures)
+        return self.coordinator.data is not None and len(self.coordinator.data) > 0
 
 
 class MarstekMultiDeviceBinarySensor(CoordinatorEntity, BinarySensorEntity):
@@ -187,8 +188,10 @@ class MarstekMultiDeviceBinarySensor(CoordinatorEntity, BinarySensorEntity):
 
     @property
     def available(self) -> bool:
-        """Return if entity is available."""
+        """Return if entity is available - keep sensors available if we have data."""
         if self.entity_description.available_fn:
             device_data = self.coordinator.get_device_data(self.device_mac)
             return self.entity_description.available_fn(device_data)
-        return super().available and self.device_coordinator.last_update_success
+        # Keep entity available if device has any data at all (prevents "unknown" on transient failures)
+        device_data = self.coordinator.get_device_data(self.device_mac)
+        return device_data is not None and len(device_data) > 0

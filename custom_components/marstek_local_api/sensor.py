@@ -554,10 +554,11 @@ class MarstekSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
-        """Return if entity is available."""
+        """Return if entity is available - keep sensors available if we have data."""
         if self.entity_description.available_fn:
             return self.entity_description.available_fn(self.coordinator.data)
-        return super().available
+        # Keep entity available if we have any data at all (prevents "unknown" on transient failures)
+        return self.coordinator.data is not None and len(self.coordinator.data) > 0
 
 
 class MarstekMultiDeviceSensor(CoordinatorEntity, SensorEntity):
@@ -602,11 +603,13 @@ class MarstekMultiDeviceSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
-        """Return if entity is available."""
+        """Return if entity is available - keep sensors available if we have data."""
         if self.entity_description.available_fn:
             device_data = self.coordinator.get_device_data(self.device_mac)
             return self.entity_description.available_fn(device_data)
-        return super().available and self.device_coordinator.last_update_success
+        # Keep entity available if device has any data at all (prevents "unknown" on transient failures)
+        device_data = self.coordinator.get_device_data(self.device_mac)
+        return device_data is not None and len(device_data) > 0
 
 
 class MarstekAggregateSensor(CoordinatorEntity, SensorEntity):
@@ -642,7 +645,9 @@ class MarstekAggregateSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
-        """Return if entity is available."""
+        """Return if entity is available - keep sensors available if we have data."""
         if self.entity_description.available_fn:
             return self.entity_description.available_fn(self.coordinator.data)
-        return super().available
+        # Keep entity available if we have any aggregate data (prevents "unknown" on transient failures)
+        aggregates = self.coordinator.data.get("aggregates", {})
+        return aggregates is not None and len(aggregates) > 0

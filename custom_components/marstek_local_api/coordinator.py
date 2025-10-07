@@ -195,14 +195,23 @@ class MarstekMultiDeviceCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> dict[str, Any]:
         """Update data from all devices."""
         # Update all device coordinators in parallel
-        update_tasks = []
-        for coordinator in self.device_coordinators.values():
-            update_tasks.append(coordinator._async_update_data())
+        # We call _async_update_data() and manually set the data attribute
+        # since we're managing the coordinators directly
+        async def update_device(mac: str, coordinator: MarstekDataUpdateCoordinator):
+            try:
+                data = await coordinator._async_update_data()
+                coordinator.data = data  # Manually set data since we're calling _async_update_data directly
+                return data
+            except Exception as err:
+                _LOGGER.error("Error updating device %s: %s", mac, err)
+                return coordinator.data  # Return old data on error
 
-        try:
-            await asyncio.gather(*update_tasks, return_exceptions=True)
-        except Exception as err:
-            _LOGGER.error("Error updating devices: %s", err)
+        update_tasks = [
+            update_device(mac, coordinator)
+            for mac, coordinator in self.device_coordinators.items()
+        ]
+
+        await asyncio.gather(*update_tasks, return_exceptions=True)
 
         # Build combined data structure
         data = {
@@ -278,11 +287,12 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from API with tiered polling strategy."""
         try:
+            # Check if this is truly the first update (never been run before)
+            is_first_update = self.data is None
+            _LOGGER.debug("Update starting - is_first_update=%s, self.data=%s", is_first_update, "None" if self.data is None else f"dict with {len(self.data)} keys")
+
             # Start with previous data to preserve values on partial failures
             data = dict(self.data) if self.data else {}
-
-            # On first update, always get device info for initial setup
-            is_first_update = self.data is None or not self.data
             if is_first_update:
                 _LOGGER.debug("First update - fetching device info")
                 try:
@@ -401,17 +411,19 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
             # Increment update counter
             self.update_count += 1
 
-            # Only fail on first update if we got absolutely nothing
+            # On first update, we need at least some data to proceed
+            # But we're lenient - even just device info is enough
             if is_first_update and not data:
+                _LOGGER.warning("First update failed - no data received, will retry")
                 raise UpdateFailed("No response from device - check network connectivity")
 
             # If we got any new data, update the last message timestamp
             # (We compare with the preserved old data to see if anything changed)
             if data != self.data:
                 self.last_message_timestamp = time.time()
-                _LOGGER.debug("Updated data - at least one API call succeeded")
+                _LOGGER.debug("Updated data - at least one API call succeeded (keys: %s)", list(data.keys()))
             else:
-                _LOGGER.debug("No new data this update - all API calls may have timed out, keeping old values")
+                _LOGGER.debug("No new data this update - all API calls may have timed out, keeping old values (keys: %s)", list(data.keys()))
 
             # Add diagnostic data (will be recalculated on sensor access)
             data["_diagnostic"] = {

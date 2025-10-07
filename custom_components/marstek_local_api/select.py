@@ -88,6 +88,12 @@ class MarstekOperatingModeSelect(CoordinatorEntity, SelectEntity):
         mode_data = self.coordinator.data.get("mode", {})
         return mode_data.get("mode")
 
+    @property
+    def available(self) -> bool:
+        """Return if entity is available - keep available if we have data."""
+        # Keep entity available if we have any data at all (prevents "unknown" on transient failures)
+        return self.coordinator.data is not None and len(self.coordinator.data) > 0
+
     async def async_select_option(self, option: str) -> None:
         """Change the operating mode."""
         if option not in OPERATING_MODES:
@@ -205,6 +211,13 @@ class MarstekMultiDeviceOperatingModeSelect(CoordinatorEntity, SelectEntity):
         device_data = self.coordinator.get_device_data(self.device_mac)
         mode_data = device_data.get("mode", {})
         return mode_data.get("mode")
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available - keep available if we have data."""
+        # Keep entity available if device has any data at all (prevents "unknown" on transient failures)
+        device_data = self.coordinator.get_device_data(self.device_mac)
+        return device_data is not None and len(device_data) > 0
 
     async def async_select_option(self, option: str) -> None:
         """Change the operating mode."""
