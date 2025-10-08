@@ -260,11 +260,11 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
         if self.firmware_version >= FIRMWARE_THRESHOLD:
             scaling = {
                 "bat_temp": 1.0,
-                "bat_capacity": 1000.0,
+                "bat_capacity": 1.0,
                 "bat_power": 1.0,
-                "total_grid_input_energy": 10.0,
-                "total_grid_output_energy": 10.0,
-                "total_load_energy": 10.0,
+                "total_grid_input_energy": 0.01,
+                "total_grid_output_energy": 0.01,
+                "total_load_energy": 0.01,
             }
         else:
             scaling = {
@@ -273,7 +273,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                 "bat_power": 10.0,
                 "total_grid_input_energy": 0.1,
                 "total_grid_output_energy": 0.1,
-                "total_load_energy": .1,
+                "total_load_energy": 0.1,
             }
 
         return value / scaling.get(field, 1.0)
