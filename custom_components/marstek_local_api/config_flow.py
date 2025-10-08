@@ -48,10 +48,11 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any], use_ephemera
 
         # Return info that you want to store in the config entry.
         return {
-            "title": f"{device_info.get('device', 'Marstek Device')} ({device_info.get('wifi_mac', 'Unknown')})",
+            "title": f"{device_info.get('device', 'Marstek Device')} ({device_info.get('ble_mac', device_info.get('wifi_mac', 'Unknown'))})",
             "device": device_info.get("device"),
             "firmware": device_info.get("ver"),
-            "mac": device_info.get("wifi_mac"),
+            "wifi_mac": device_info.get("wifi_mac"),
+            "ble_mac": device_info.get("ble_mac"),
         }
 
     except MarstekAPIError as err:
@@ -177,9 +178,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # Check if user selected "All devices"
         if selected == "__all__":
             # Create multi-device entry
-            # Use a synthetic unique ID based on all IP+port combinations
-            all_ip_ports = sorted([f"{d['ip']}:{DEFAULT_PORT}" for d in self._discovered_devices])
-            unique_id = "_".join(all_ip_ports)
+            # Use a synthetic unique ID based on all BLE MACs
+            all_ble_macs = sorted([d["ble_mac"] for d in self._discovered_devices if d.get("ble_mac")])
+            unique_id = "_".join(all_ble_macs)
 
             await self.async_set_unique_id(unique_id)
             self._abort_if_unique_id_configured()
@@ -191,7 +192,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         {
                             CONF_HOST: d["ip"],
                             CONF_PORT: DEFAULT_PORT,
-                            "mac": d["mac"],
+                            "wifi_mac": d.get("wifi_mac"),
+                            "ble_mac": d.get("ble_mac"),
                             "device": d["name"],
                             "firmware": d["firmware"],
                         }
@@ -210,7 +212,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_show_form(step_id="discovery", errors=errors)
 
         # Check if already configured
-        unique_id = f"{device['ip']}:{DEFAULT_PORT}"
+        unique_id = device.get("ble_mac") or device.get("mac")
         await self.async_set_unique_id(unique_id)
         self._abort_if_unique_id_configured()
 
@@ -220,7 +222,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data={
                 CONF_HOST: device["ip"],
                 CONF_PORT: DEFAULT_PORT,
-                "mac": device["mac"],
+                "wifi_mac": device.get("wifi_mac"),
+                "ble_mac": device.get("ble_mac"),
                 "device": device["name"],
                 "firmware": device["firmware"],
             },
@@ -237,7 +240,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 info = await validate_input(self.hass, user_input)
 
                 # Check if already configured
-                unique_id = f"{user_input[CONF_HOST]}:{user_input[CONF_PORT]}"
+                unique_id = info.get("ble_mac") or info.get("wifi_mac")
                 await self.async_set_unique_id(unique_id)
                 self._abort_if_unique_id_configured()
 
@@ -246,7 +249,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     data={
                         CONF_HOST: user_input[CONF_HOST],
                         CONF_PORT: user_input[CONF_PORT],
-                        "mac": info["mac"],
+                        "wifi_mac": info["wifi_mac"],
+                        "ble_mac": info["ble_mac"],
                         "device": info["device"],
                         "firmware": info["firmware"],
                     },
@@ -281,7 +285,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
             # Check if already configured
-            unique_id = f"{host}:{DEFAULT_PORT}"
+            unique_id = info.get("ble_mac") or info.get("wifi_mac")
             await self.async_set_unique_id(unique_id)
             self._abort_if_unique_id_configured(updates={CONF_HOST: host})
 
@@ -290,7 +294,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self.context["device_info"] = {
                 CONF_HOST: host,
                 CONF_PORT: DEFAULT_PORT,
-                "mac": info["mac"],
+                "wifi_mac": info["wifi_mac"],
+                "ble_mac": info["ble_mac"],
                 "device": info["device"],
                 "firmware": info["firmware"],
             }

@@ -536,9 +536,10 @@ class MarstekSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self.entity_description = entity_description
         self._attr_has_entity_name = True
-        self._attr_unique_id = f"{entry.data['mac']}_{entity_description.key}"
+        device_mac = entry.data.get("ble_mac") or entry.data.get("wifi_mac")
+        self._attr_unique_id = f"{device_mac}_{entity_description.key}"
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.data["mac"])},
+            identifiers={(DOMAIN, device_mac)},
             name=f"Marstek {entry.data['device']}",
             manufacturer="Marstek",
             model=entry.data["device"],
