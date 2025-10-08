@@ -271,9 +271,9 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                 "bat_temp": 10.0,
                 "bat_capacity": 100.0,
                 "bat_power": 10.0,
-                "total_grid_input_energy": 100.0,
-                "total_grid_output_energy": 100.0,
-                "total_load_energy": 100.0,
+                "total_grid_input_energy": 0.1,
+                "total_grid_output_energy": 0.1,
+                "total_load_energy": .1,
             }
 
         return value / scaling.get(field, 1.0)
