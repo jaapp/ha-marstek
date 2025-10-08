@@ -62,6 +62,7 @@ class MarstekUDPClient:
             return
 
         loop = asyncio.get_event_loop()
+        self._loop = loop
 
         _LOGGER.info(
             "Connecting UDP socket: local_port=%s, remote_host=%s, remote_port=%s",

@@ -47,7 +47,7 @@ class MarstekMultiDeviceCoordinator(DataUpdateCoordinator):
     async def async_setup(self) -> None:
         """Set up individual device coordinators."""
         for device_data in self.devices:
-            mac = device_data["mac"]
+            mac = device_data.get("ble_mac") or device_data.get("wifi_mac")
 
             # Create API client for this device
             api = MarstekUDPClient(

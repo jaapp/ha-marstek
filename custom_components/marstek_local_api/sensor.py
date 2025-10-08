@@ -453,7 +453,7 @@ async def async_setup_entry(
         # Multi-device mode - create sensors for each device + aggregate sensors
         for mac in coordinator.get_device_macs():
             device_coordinator = coordinator.device_coordinators[mac]
-            device_data = next(d for d in coordinator.devices if d["mac"] == mac)
+            device_data = next(d for d in coordinator.devices if (d.get("ble_mac") or d.get("wifi_mac")) == mac)
 
             # Add standard sensors for this device
             for description in SENSOR_TYPES:

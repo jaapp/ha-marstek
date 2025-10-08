@@ -80,7 +80,7 @@ async def async_setup_entry(
         # Multi-device mode - create binary sensors for each device
         for mac in coordinator.get_device_macs():
             device_coordinator = coordinator.device_coordinators[mac]
-            device_data = next(d for d in coordinator.devices if d["mac"] == mac)
+            device_data = next(d for d in coordinator.devices if (d.get("ble_mac") or d.get("wifi_mac")) == mac)
 
             for description in BINARY_SENSOR_TYPES:
                 entities.append(
