@@ -72,10 +72,11 @@ class MarstekOperatingModeSelect(CoordinatorEntity, SelectEntity):
         """Initialize the select."""
         super().__init__(coordinator)
         self._attr_has_entity_name = True
-        self._attr_unique_id = f"{entry.data['mac']}_operating_mode_select"
+        device_mac = entry.data.get("ble_mac") or entry.data.get("wifi_mac")
+        self._attr_unique_id = f"{device_mac}_operating_mode_select"
         self._attr_name = "Operating mode"
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.data["mac"])},
+            identifiers={(DOMAIN, device_mac)},
             name=f"Marstek {entry.data['device']}",
             manufacturer="Marstek",
             model=entry.data["device"],
