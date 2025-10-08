@@ -259,7 +259,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
         # Firmware-specific scaling based on design doc
         if self.firmware_version >= FIRMWARE_THRESHOLD:
             scaling = {
-                "bat_temp": 1.0,
+                "bat_temp": 0.1,
                 "bat_capacity": 1.0,
                 "bat_power": 1.0,
                 "total_grid_input_energy": 0.01,
@@ -268,7 +268,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
             }
         else:
             scaling = {
-                "bat_temp": 10.0,
+                "bat_temp": 1.0,
                 "bat_capacity": 100.0,
                 "bat_power": 10.0,
                 "total_grid_input_energy": 0.1,
