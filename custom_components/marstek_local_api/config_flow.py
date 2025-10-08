@@ -177,9 +177,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # Check if user selected "All devices"
         if selected == "__all__":
             # Create multi-device entry
-            # Use a synthetic unique ID based on all MACs
-            all_macs = sorted([d["mac"] for d in self._discovered_devices])
-            unique_id = "_".join(all_macs)
+            # Use a synthetic unique ID based on all IP+port combinations
+            all_ip_ports = sorted([f"{d['ip']}:{DEFAULT_PORT}" for d in self._discovered_devices])
+            unique_id = "_".join(all_ip_ports)
 
             await self.async_set_unique_id(unique_id)
             self._abort_if_unique_id_configured()
@@ -210,7 +210,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_show_form(step_id="discovery", errors=errors)
 
         # Check if already configured
-        await self.async_set_unique_id(device["mac"])
+        unique_id = f"{device['ip']}:{DEFAULT_PORT}"
+        await self.async_set_unique_id(unique_id)
         self._abort_if_unique_id_configured()
 
         # Create entry for single device
@@ -236,7 +237,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 info = await validate_input(self.hass, user_input)
 
                 # Check if already configured
-                await self.async_set_unique_id(info["mac"])
+                unique_id = f"{user_input[CONF_HOST]}:{user_input[CONF_PORT]}"
+                await self.async_set_unique_id(unique_id)
                 self._abort_if_unique_id_configured()
 
                 return self.async_create_entry(
@@ -279,7 +281,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
             # Check if already configured
-            await self.async_set_unique_id(info["mac"])
+            unique_id = f"{host}:{DEFAULT_PORT}"
+            await self.async_set_unique_id(unique_id)
             self._abort_if_unique_id_configured(updates={CONF_HOST: host})
 
             # Store discovery info for confirmation
