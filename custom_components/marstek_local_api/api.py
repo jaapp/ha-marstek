@@ -466,7 +466,7 @@ class MarstekUDPClient:
     async def discover_devices(self, timeout: int = DISCOVERY_TIMEOUT) -> list[dict]:
         """Discover Marstek devices on the network."""
         devices = []
-        discovered_ips = set()  # Use IP as unique identifier instead of MAC
+        discovered_macs = set()
 
         def handler(message, addr):
             """Handle discovery responses."""
@@ -481,24 +481,34 @@ class MarstekUDPClient:
                 ble_mac = result.get("ble_mac")
                 ip = addr[0]
 
-                _LOGGER.debug("Discovery response: wifi_mac=%s, ble_mac=%s, ip=%s, already_discovered=%s",
-                             wifi_mac, ble_mac, ip, ip in discovered_ips)
+                if not ble_mac:
+                    _LOGGER.debug(
+                        "Skipping discovery response without BLE MAC: wifi_mac=%s ip=%s",
+                        wifi_mac,
+                        ip,
+                    )
+                    return
 
-                # Use IP as unique identifier (multiple batteries may share wifi_mac)
-                if ip and ip not in discovered_ips:
-                    discovered_ips.add(ip)
-                    # Use BLE MAC as the unique device identifier (more unique than wifi_mac)
-                    device = {
-                        "name": result.get("device", "Unknown"),
-                        "ip": ip,
-                        "mac": ble_mac if ble_mac else wifi_mac,  # Prefer BLE MAC
-                        "firmware": result.get("ver", 0),
-                        "ble_mac": ble_mac,
-                        "wifi_mac": wifi_mac,
-                        "wifi_name": result.get("wifi_name"),
-                    }
-                    devices.append(device)
-                    _LOGGER.info("Added discovered device: %s", device)
+                if ble_mac in discovered_macs:
+                    _LOGGER.debug(
+                        "Discovery response for %s already processed (ip=%s)",
+                        ble_mac,
+                        ip,
+                    )
+                    return
+
+                discovered_macs.add(ble_mac)
+                device = {
+                    "name": result.get("device", "Unknown"),
+                    "ip": ip,
+                    "mac": ble_mac,
+                    "firmware": result.get("ver", 0),
+                    "ble_mac": ble_mac,
+                    "wifi_mac": wifi_mac,
+                    "wifi_name": result.get("wifi_name"),
+                }
+                devices.append(device)
+                _LOGGER.info("Added discovered device: %s", device)
 
         # Register handler
         self.register_handler(handler)

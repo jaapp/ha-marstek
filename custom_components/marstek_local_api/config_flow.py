@@ -61,7 +61,6 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any], use_ephemera
     finally:
         await api.disconnect()
 
-
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Marstek Local API."""
 
@@ -177,13 +176,21 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         # Check if user selected "All devices"
         if selected == "__all__":
-            # Create multi-device entry
-            # Use a synthetic unique ID based on all BLE MACs
-            all_ble_macs = sorted([d["ble_mac"] for d in self._discovered_devices if d.get("ble_mac")])
+            # Create multi-device entry using combined BLE MACs for uniqueness
+            all_ble_macs = sorted(
+                {
+                    d["ble_mac"]
+                    for d in self._discovered_devices
+                    if d.get("ble_mac")
+                }
+            )
             unique_id = "_".join(all_ble_macs)
 
-            await self.async_set_unique_id(unique_id)
-            self._abort_if_unique_id_configured()
+            if not unique_id:
+                _LOGGER.debug("No BLE MACs found during multi-device selection; skipping duplicate guard")
+            else:
+                await self.async_set_unique_id(unique_id)
+                self._abort_if_unique_id_configured()
 
             return self.async_create_entry(
                 title=f"Marstek System ({len(self._discovered_devices)} batteries)",
@@ -212,9 +219,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_show_form(step_id="discovery", errors=errors)
 
         # Check if already configured
-        unique_id = device.get("ble_mac") or device.get("mac")
-        await self.async_set_unique_id(unique_id)
-        self._abort_if_unique_id_configured()
+        unique_id = device.get("ble_mac")
+        if not unique_id:
+            _LOGGER.debug("Device %s missing BLE MAC; continuing without duplicate guard", device.get("ip"))
+        else:
+            await self.async_set_unique_id(unique_id)
+            self._abort_if_unique_id_configured()
 
         # Create entry for single device
         return self.async_create_entry(
@@ -240,9 +250,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 info = await validate_input(self.hass, user_input)
 
                 # Check if already configured
-                unique_id = info.get("ble_mac") or info.get("wifi_mac")
-                await self.async_set_unique_id(unique_id)
-                self._abort_if_unique_id_configured()
+                unique_id = info.get("ble_mac")
+                if not unique_id:
+                    _LOGGER.debug("Manual setup for host %s missing BLE MAC; skipping duplicate guard", user_input.get(CONF_HOST))
+                else:
+                    await self.async_set_unique_id(unique_id)
+                    self._abort_if_unique_id_configured()
 
                 return self.async_create_entry(
                     title=info["title"],
@@ -285,9 +298,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
             # Check if already configured
-            unique_id = info.get("ble_mac") or info.get("wifi_mac")
-            await self.async_set_unique_id(unique_id)
-            self._abort_if_unique_id_configured(updates={CONF_HOST: host})
+            unique_id = info.get("ble_mac")
+            if not unique_id:
+                _LOGGER.debug("DHCP discovery for host %s missing BLE MAC; skipping duplicate guard", host)
+            else:
+                await self.async_set_unique_id(unique_id)
+                self._abort_if_unique_id_configured(updates={CONF_HOST: host})
 
             # Store discovery info for confirmation
             self.context["title_placeholders"] = {"name": info["title"]}
