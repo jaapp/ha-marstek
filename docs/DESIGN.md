@@ -332,20 +332,20 @@ class MarstekLocalAPI:
 ### Coordinator Pattern
 ```python
 class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
-    update_interval = 60 seconds (base interval)
+    update_interval = 15 seconds (base interval)
 
     async def _async_update_data():
         # See "Polling Strategy" section for tiered polling implementation
-        # High priority (60s): ES, Battery
-        # Medium priority (300s): EM, PV, Mode
-        # Low priority (600s): Device, WiFi, BLE
+        # High priority (15s): ES, Battery
+        # Medium priority (75s): EM, PV, Mode
+        # Low priority (150s): Device, WiFi, BLE
         return data
 ```
 
 ### Update Intervals
-- **Fast poll** (60s): ES & Battery status — real-time power/energy
-- **Medium poll** (300s): EM, PV, Mode — slower-changing data
-- **Slow poll** (600s): Device, WiFi, BLE — static/diagnostic data
+- **Fast poll** (15s): ES & Battery status — real-time power/energy
+- **Medium poll** (75s): EM, PV, Mode — slower-changing data
+- **Slow poll** (150s): Device, WiFi, BLE — static/diagnostic data
 
 ---
 
@@ -456,9 +456,9 @@ Not all API methods need equal polling frequency. Optimize network usage with ti
 
 | Priority | Interval | Methods | Rationale |
 |----------|----------|---------|-----------|
-| High | 15s | `ES.GetStatus`, `EM.GetStatus` | Real-time power/energy data |
-| Medium | 60s | `Bat.GetStatus`, `PV.GetStatus`, `ES.GetMode` | Slower-changing battery stats |
-| Low | 300s | `Marstek.GetDevice`, `Wifi.GetStatus`, `BLE.GetStatus` | Static/diagnostic data |
+| High | 15s | `ES.GetStatus`, `Bat.GetStatus` | Real-time power/energy and battery state of charge |
+| Medium | 75s | `EM.GetStatus`, `PV.GetStatus`, `ES.GetMode` | Slower-changing CT, solar, mode data |
+| Low | 150s | `Marstek.GetDevice`, `Wifi.GetStatus`, `BLE.GetStatus` | Static/diagnostic data |
 
 **Implementation Pattern:**
 ```python
@@ -472,16 +472,16 @@ class MarstekDataUpdateCoordinator:
 
         # Every update (15s)
         data["es"] = await self.api.get_es_status()
-        data["em"] = await self.api.get_em_status()
+        data["battery"] = await self.api.get_battery_status()
 
-        # Every 4th update (60s)
-        if self.update_count % 4 == 0:
-            data["battery"] = await self.api.get_battery_status()
+        # Every 5th update (75s)
+        if self.update_count % 5 == 0:
             data["pv"] = await self.api.get_pv_status()
             data["mode"] = await self.api.get_es_mode()
+            data["em"] = await self.api.get_em_status()
 
-        # Every 20th update (300s)
-        if self.update_count % 20 == 0:
+        # Every 10th update (150s)
+        if self.update_count % 10 == 0:
             data["device"] = await self.api.get_device_info()
             data["wifi"] = await self.api.get_wifi_status()
             data["ble"] = await self.api.get_ble_status()
@@ -521,7 +521,13 @@ async def set_mode(config: dict, retries: int = 5):
                 await asyncio.sleep(2)
                 continue
             raise
-```
+
+## Diagnostics & Telemetry
+
+- The UDP client records per-method statistics (`total_attempts`, `total_success`, `total_timeouts`, `last_latency`).
+- Device coordinators summarise these values together with poll timing (`target_interval`, `actual_interval`).
+- A diagnostics handler (`diagnostics.py`) exposes the snapshot so users can download poll/latency numbers from Home Assistant's diagnostics panel.
+
 
 ### Command Response Matching
 
@@ -555,25 +561,8 @@ async def send_command(method: str, params: dict, timeout: int = 15):
 
 ### Connection Health Monitoring
 
-**Diagnostic Sensor:** `sensor.marstek_last_message_received`
-- Updates every second
-- Shows seconds since last successful API response
-- Triggers unavailable state if > 120 seconds
-
-```python
-class LastMessageReceivedSensor:
-    def __init__(self):
-        self.last_timestamp = None
-
-    @property
-    def native_value(self):
-        if self.last_timestamp:
-            return int((time.time() - self.last_timestamp))
-        return None
-
-    def update_timestamp(self):
-        self.last_timestamp = time.time()
-```
+- Coordinators store `last_message_seconds` so diagnostics can report how long it has been since a successful response.
+- Callers should mark the device unavailable when this exceeds `UNAVAILABLE_THRESHOLD` (120 seconds).
 
 ### Socket Architecture
 

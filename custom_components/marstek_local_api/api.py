@@ -6,6 +6,7 @@ import json
 import logging
 import random
 import socket
+import time
 from typing import Any
 from uuid import uuid4
 
@@ -61,6 +62,7 @@ class MarstekUDPClient:
         self._handlers: list = []
         self._connected = False
         self._stale_message_counter = 0
+        self._command_stats: dict[str, dict[str, Any]] = {}
 
     async def connect(self) -> None:
         """Connect to the UDP socket."""
@@ -291,6 +293,14 @@ class MarstekUDPClient:
 
                     latency = loop.time() - attempt_started
                     self._stale_message_counter = 0
+                    self._record_command_result(
+                        method,
+                        success=True,
+                        attempt=attempt,
+                        latency=latency,
+                        timeout=False,
+                        error=None,
+                    )
                     _LOGGER.debug(
                         "Command %s completed successfully in %.2fs (attempt %d)",
                         method,
@@ -300,6 +310,14 @@ class MarstekUDPClient:
                     return response_data.get("result")
 
                 except asyncio.TimeoutError:
+                    self._record_command_result(
+                        method,
+                        success=False,
+                        attempt=attempt,
+                        latency=None,
+                        timeout=True,
+                        error="timeout",
+                    )
                     _LOGGER.warning(
                         "Command %s timed out after %ss (attempt %d/%d, host=%s)",
                         method,
@@ -310,8 +328,24 @@ class MarstekUDPClient:
                     )
                     last_exception = None
                 except MarstekAPIError:
+                    self._record_command_result(
+                        method,
+                        success=False,
+                        attempt=attempt,
+                        latency=None,
+                        timeout=False,
+                        error="api_error",
+                    )
                     raise
                 except Exception as err:
+                    self._record_command_result(
+                        method,
+                        success=False,
+                        attempt=attempt,
+                        latency=None,
+                        timeout=False,
+                        error=str(err),
+                    )
                     _LOGGER.error(
                         "Error sending command %s to %s on attempt %d/%d: %s",
                         method,
@@ -369,6 +403,58 @@ class MarstekUDPClient:
         if COMMAND_BACKOFF_JITTER > 0:
             return capped + random.uniform(0, COMMAND_BACKOFF_JITTER)
         return capped
+
+    def _record_command_result(
+        self,
+        method: str,
+        *,
+        success: bool,
+        attempt: int,
+        latency: float | None,
+        timeout: bool,
+        error: str | None,
+    ) -> None:
+        """Track command attempt statistics for diagnostics."""
+        stats = self._command_stats.setdefault(
+            method,
+            {
+                "total_attempts": 0,
+                "total_success": 0,
+                "total_timeouts": 0,
+                "total_failures": 0,
+                "last_success": None,
+                "last_attempt": None,
+                "last_latency": None,
+                "last_timeout": False,
+                "last_error": None,
+                "last_updated": None,
+                "last_success_at": None,
+            },
+        )
+
+        stats["total_attempts"] += 1
+        if success:
+            stats["total_success"] += 1
+        elif timeout:
+            stats["total_timeouts"] += 1
+        else:
+            stats["total_failures"] += 1
+
+        stats["last_success"] = success
+        stats["last_attempt"] = attempt
+        stats["last_latency"] = latency
+        stats["last_timeout"] = timeout
+        stats["last_error"] = error
+        stats["last_updated"] = time.time()
+        if success:
+            stats["last_success_at"] = stats["last_updated"]
+
+    def get_command_stats(self, method: str) -> dict[str, Any] | None:
+        """Return snapshot of command statistics."""
+        stats = self._command_stats.get(method)
+        if stats is None:
+            return None
+        return dict(stats)
 
     async def broadcast(self, message: str) -> None:
         """Broadcast a message."""

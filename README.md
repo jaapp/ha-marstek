@@ -41,7 +41,7 @@ Home Assistant integration for Marstek energy storage systems using the official
 - **Operating Mode Control**: Switch between Auto, AI, Manual, and Passive modes
 - **Energy Dashboard Integration**: Built-in support for Home Assistant Energy Dashboard
 - **Automatic Discovery**: Finds Marstek devices on your network automatically
-- **Tiered Polling**: Optimized 60 s / 300 s / 600 s refresh tiers per sensor category
+- **Tiered Polling**: Optimized 15 s / 75 s / 150 s refresh tiers per sensor category
 - **Adaptive Retries**: UDP command retries with exponential backoff to avoid flooding the device
 
 ## Supported Devices
@@ -119,14 +119,14 @@ The integration creates the following entities:
 
 | Category | Entities | Refresh cadence |
 | --- | --- | --- |
-| **Energy system (ES)** | Battery Power<br>Battery Power In / Out<br>Battery State<br>Grid Power<br>Off-Grid Power<br>Solar Power<br>Total PV / Grid / Load Energy | Every 60 s |
-| **Battery** | State of Charge<br>Temperature<br>Remaining Capacity<br>Rated Capacity<br>Available Capacity | Every 60 s |
-| **Operating mode** | Operating Mode | Every 300 s |
-| **Energy meter / CT (EM)** | Phase A Power<br>Phase B Power<br>Phase C Power<br>Total Power | Every 300 s |
-| **Solar (Venus D only)** | PV Power<br>PV Voltage<br>PV Current | Every 300 s |
-| **Network** | WiFi Signal Strength<br>SSID<br>IP Address<br>Gateway<br>Subnet<br>DNS | Every 600 s |
-| **Device** | Device Model<br>Firmware Version<br>Bluetooth MAC<br>WiFi MAC<br>Device IP | Every 600 s |
-| **Diagnostics** | Last Message Received (seconds) | Every 600 s |
+| **Energy system (ES)** | Battery Power<br>Battery Power In / Out<br>Battery State<br>Grid Power<br>Off-Grid Power<br>Solar Power<br>Total PV / Grid / Load Energy | Every 15 s |
+| **Battery** | State of Charge<br>Temperature<br>Remaining Capacity<br>Rated Capacity<br>Available Capacity | Every 15 s |
+| **Operating mode** | Operating Mode | Every 75 s |
+| **Energy meter / CT (EM)** | Phase A Power<br>Phase B Power<br>Phase C Power<br>Total Power | Every 75 s |
+| **Solar (Venus D only)** | PV Power<br>PV Voltage<br>PV Current | Every 75 s |
+| **Network** | WiFi Signal Strength<br>SSID<br>IP Address<br>Gateway<br>Subnet<br>DNS | Every 150 s |
+| **Device** | Device Model<br>Firmware Version<br>Bluetooth MAC<br>WiFi MAC<br>Device IP | Every 150 s |
+| **Diagnostics** | Last message age | Every 15 s |
 
 ### Binary Sensors
 
@@ -174,6 +174,10 @@ Go to Settings → Dashboards → Energy → Add Individual Device
 
 - **Home Consumption:** `sensor.marstek_total_load_energy`
 
+## Diagnostics
+
+Use Settings → System → Diagnostics → Marstek Local API to download a JSON snapshot with per-battery poll statistics (requested vs. observed interval, command latency, timeout counters, success rates, last message age). Share this file when reporting issues so we can see whether the device keeps up with the configured cadence.
+
 ## Firmware Version Handling
 
 The integration automatically detects firmware version and applies appropriate value scaling:
@@ -218,7 +222,6 @@ What's missing:
 
 ## TODO
 
-- Implement a diagnostics download (`diagnostics.py`) and update `manifest.json` with required metadata such as `loggers` and `quality_scale`.
 - Add a pytest-based Home Assistant test suite that exercises config flows, coordinators, entities, and the diagnostics handler.
 - Refactor entities to use translation keys with localized strings and mark diagnostic sensors/selects with `entity_category`.
 - Replace blocking subprocess calls in the UDP client with executor-friendly helpers to keep the event loop responsive.
@@ -306,6 +309,7 @@ Based on:
 This project is licensed under the MIT License.
 ### Update Cadence & Retries
 
-- Default refresh interval is 60 seconds; you can choose any value between 60 s and 900 s in the integration options.
-- Fast tier (power/energy telemetry) updates every cycle, medium tier (battery/PV/mode) every 5th cycle (~300 s), slow diagnostics every 10th cycle (~600 s).
+- Default refresh interval is 15 seconds; you can choose any value between 15 s and 900 s in the integration options.
+- Fast tier (power/energy telemetry) updates every cycle (~15 s), medium tier (battery/PV/mode/CT) every 5th cycle (~75 s), slow diagnostics every 10th cycle (~150 s).
 - All UDP commands include a capped exponential backoff with jitter to drain stale packets and minimise queue pressure.
+- **Diagnostics export**: download detailed polling/latency statistics via Home Assistant's diagnostics panel to verify the device keeps up with the configured cadence.

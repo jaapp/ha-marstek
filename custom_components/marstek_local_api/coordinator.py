@@ -19,6 +19,8 @@ from .const import (
     UPDATE_INTERVAL_FAST,
     UPDATE_INTERVAL_MEDIUM,
     UPDATE_INTERVAL_SLOW,
+    METHOD_BATTERY_STATUS,
+    METHOD_ES_STATUS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -247,6 +249,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
         self.last_message_timestamp: float | None = None
         jitter_cap = min(2.5, max(0.5, scan_interval * 0.1))
         self.poll_jitter = random.uniform(0.2, jitter_cap)
+        self._last_update_start: float | None = None
 
         super().__init__(
             hass,
@@ -288,9 +291,40 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
             return None
         return int(time.time() - self.last_message_timestamp)
 
+    def _build_command_diagnostics(self, prefix: str, stats: dict[str, Any] | None) -> dict[str, Any]:
+        """Transform command stats into diagnostic fields."""
+        if not stats:
+            return {}
+
+        total_attempts = stats.get("total_attempts", 0)
+        total_success = stats.get("total_success", 0)
+        total_timeouts = stats.get("total_timeouts", 0)
+        success_rate = (
+            (total_success / total_attempts) * 100 if total_attempts else None
+        )
+
+        last_success = stats.get("last_success")
+        diag: dict[str, Any] = {
+            f"{prefix}_last_latency": stats.get("last_latency"),
+            f"{prefix}_last_attempt": stats.get("last_attempt"),
+            f"{prefix}_last_success": None if last_success is None else int(bool(last_success)),
+            f"{prefix}_timeout_total": total_timeouts,
+            f"{prefix}_success_total": total_success,
+            f"{prefix}_request_total": total_attempts,
+            f"{prefix}_success_rate": success_rate,
+            f"{prefix}_last_error": stats.get("last_error"),
+        }
+        return diag
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from API with tiered polling strategy."""
         try:
+            update_started = time.time()
+            actual_interval = None
+            if self._last_update_start is not None:
+                actual_interval = update_started - self._last_update_start
+            self._last_update_start = update_started
+
             # Check if this is truly the first update (never been run before)
             is_first_update = self.data is None
             _LOGGER.debug("Update starting - is_first_update=%s, self.data=%s", is_first_update, "None" if self.data is None else f"dict with {len(self.data)} keys")
@@ -307,7 +341,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                 except Exception as err:
                     _LOGGER.warning("Failed to get device info on first update: %s", err)
 
-            # High priority - every update (~60s)
+            # High priority - every update (~15s)
             # ES.GetStatus and Bat.GetStatus for real-time power/energy data
             try:
                 await asyncio.sleep(1.0)  # Delay between API calls
@@ -356,7 +390,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                     )
                 data["battery"] = battery_status
 
-            # Medium priority - every 5th update (~300s)
+            # Medium priority - every 5th update (~75s)
             # EM, PV, Mode - slower-changing data
             run_medium = self.update_count == 1 or self.update_count % UPDATE_INTERVAL_MEDIUM == 0
             if run_medium:
@@ -386,7 +420,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                 except Exception as err:
                     _LOGGER.debug("Failed to get mode status: %s", err)
 
-            # Low priority - every 10th update (~600s)
+            # Low priority - every 10th update (~150s)
             # Device, WiFi, BLE - static/diagnostic data
             if self.update_count % UPDATE_INTERVAL_SLOW == 0:
                 try:
@@ -431,9 +465,21 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                 _LOGGER.debug("No new data this update - all API calls may have timed out, keeping old values (keys: %s)", list(data.keys()))
 
             # Add diagnostic data (will be recalculated on sensor access)
-            data["_diagnostic"] = {
+            es_stats = self.api.get_command_stats(METHOD_ES_STATUS)
+            bat_stats = self.api.get_command_stats(METHOD_BATTERY_STATUS)
+            target_interval = (
+                self.update_interval.total_seconds() if self.update_interval else None
+            )
+
+            diagnostic_data = {
                 "last_message_seconds": self._get_seconds_since_last_message(),
+                "target_interval": target_interval,
+                "actual_interval": actual_interval,
             }
+            diagnostic_data.update(self._build_command_diagnostics("es", es_stats))
+            diagnostic_data.update(self._build_command_diagnostics("bat", bat_stats))
+
+            data["_diagnostic"] = diagnostic_data
 
             return data
 
