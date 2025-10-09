@@ -83,11 +83,17 @@ class MarstekUDPClient:
             # on the same port can receive all UDP messages
             if self.port not in _shared_transports:
                 # Create shared UDP endpoint for this port
+                import sys
+                endpoint_kwargs = {
+                    "local_addr": ("0.0.0.0", self.port),
+                    "allow_broadcast": True,
+                }
+                # reuse_port is not supported on Windows
+                if sys.platform != "win32":
+                    endpoint_kwargs["reuse_port"] = True
                 transport, protocol = await loop.create_datagram_endpoint(
                     lambda: MarstekProtocol(),
-                    local_addr=("0.0.0.0", self.port),
-                    allow_broadcast=True,
-                    reuse_port=True,  # Allow multiple binds to same port
+                    **endpoint_kwargs,
                 )
                 _shared_transports[self.port] = transport
                 _shared_protocols[self.port] = protocol
