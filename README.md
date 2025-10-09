@@ -216,6 +216,14 @@ What's missing:
 - Manual mode and Passive mode use default configurations (future versions will allow customization)
 - **This is alpha software - expect bugs, crashes, and general weirdness**
 
+## TODO
+
+- Implement a diagnostics download (`diagnostics.py`) and update `manifest.json` with required metadata such as `loggers` and `quality_scale`.
+- Add a pytest-based Home Assistant test suite that exercises config flows, coordinators, entities, and the diagnostics handler.
+- Refactor entities to use translation keys with localized strings and mark diagnostic sensors/selects with `entity_category`.
+- Replace blocking subprocess calls in the UDP client with executor-friendly helpers to keep the event loop responsive.
+- Polish documentation and UX (professional README tone, My Home Assistant link, configuration guides) before targeting Platinum quality.
+
 ## Troubleshooting
 
 ### Device Not Discovered
