@@ -290,7 +290,7 @@ Marstek System
 Configuration Fields:
 - Device IP: 192.168.1.10
 - Port: 30000 (default, customizable)
-- Update Interval: 15s (default, base interval for tiered polling)
+- Update Interval: 60s (default, base interval for tiered polling)
 - Device Name: (optional, auto-fills with model)
 ```
 
@@ -332,20 +332,20 @@ class MarstekLocalAPI:
 ### Coordinator Pattern
 ```python
 class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
-    update_interval = 15 seconds (base interval)
+    update_interval = 60 seconds (base interval)
 
     async def _async_update_data():
         # See "Polling Strategy" section for tiered polling implementation
-        # High priority (15s): ES, Battery
-        # Medium priority (75s): EM, PV, Mode
-        # Low priority (150s): Device, WiFi, BLE
+        # High priority (60s): ES, Battery
+        # Medium priority (300s): EM, PV, Mode
+        # Low priority (600s): Device, WiFi, BLE
         return data
 ```
 
 ### Update Intervals
-- **Fast poll** (15s): ES & Battery status — real-time power/energy
-- **Medium poll** (75s): EM, PV, Mode — slower-changing data
-- **Slow poll** (150s): Device, WiFi, BLE — static/diagnostic data
+- **Fast poll** (60s): ES & Battery status — real-time power/energy
+- **Medium poll** (300s): EM, PV, Mode — slower-changing data
+- **Slow poll** (600s): Device, WiFi, BLE — static/diagnostic data
 
 ---
 
@@ -456,31 +456,31 @@ Not all API methods need equal polling frequency. Optimize network usage with ti
 
 | Priority | Interval | Methods | Rationale |
 |----------|----------|---------|-----------|
-| High | 15s | `ES.GetStatus`, `Bat.GetStatus` | Real-time power/energy and battery state of charge |
-| Medium | 75s | `EM.GetStatus`, `PV.GetStatus`, `ES.GetMode` | Slower-changing CT, solar, mode data |
-| Low | 150s | `Marstek.GetDevice`, `Wifi.GetStatus`, `BLE.GetStatus` | Static/diagnostic data |
+| High | 60s | `ES.GetStatus`, `Bat.GetStatus` | Real-time power/energy and battery state of charge |
+| Medium | 300s | `EM.GetStatus`, `PV.GetStatus`, `ES.GetMode` | Slower-changing CT, solar, mode data |
+| Low | 600s | `Marstek.GetDevice`, `Wifi.GetStatus`, `BLE.GetStatus` | Static/diagnostic data |
 
 **Implementation Pattern:**
 ```python
 class MarstekDataUpdateCoordinator:
     def __init__(self):
         self.update_count = 0
-        self.base_interval = 15  # seconds
+        self.base_interval = 60  # seconds
 
     async def _async_update_data(self):
         data = {}
 
-        # Every update (15s)
+        # Every update (60s)
         data["es"] = await self.api.get_es_status()
         data["battery"] = await self.api.get_battery_status()
 
-        # Every 5th update (75s)
+        # Every 5th update (300s)
         if self.update_count % 5 == 0:
             data["pv"] = await self.api.get_pv_status()
             data["mode"] = await self.api.get_es_mode()
             data["em"] = await self.api.get_em_status()
 
-        # Every 10th update (150s)
+        # Every 10th update (600s)
         if self.update_count % 10 == 0:
             data["device"] = await self.api.get_device_info()
             data["wifi"] = await self.api.get_wifi_status()

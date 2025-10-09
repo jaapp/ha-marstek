@@ -341,7 +341,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                 except Exception as err:
                     _LOGGER.warning("Failed to get device info on first update: %s", err)
 
-            # High priority - every update (~15s)
+            # High priority - every update (~60s)
             # ES.GetStatus and Bat.GetStatus for real-time power/energy data
             try:
                 await asyncio.sleep(1.0)  # Delay between API calls
@@ -390,7 +390,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                     )
                 data["battery"] = battery_status
 
-            # Medium priority - every 5th update (~75s)
+            # Medium priority - every 5th update (~300s)
             # EM, PV, Mode - slower-changing data
             run_medium = self.update_count == 1 or self.update_count % UPDATE_INTERVAL_MEDIUM == 0
             if run_medium:
@@ -420,7 +420,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                 except Exception as err:
                     _LOGGER.debug("Failed to get mode status: %s", err)
 
-            # Low priority - every 10th update (~150s)
+            # Low priority - every 10th update (~600s)
             # Device, WiFi, BLE - static/diagnostic data
             if self.update_count % UPDATE_INTERVAL_SLOW == 0:
                 try:
