@@ -8,19 +8,24 @@ CONF_PORT: Final = "port"
 
 # Default values
 DEFAULT_PORT: Final = 30000
-DEFAULT_SCAN_INTERVAL: Final = 15  # Base interval in seconds
+DEFAULT_SCAN_INTERVAL: Final = 60  # Base interval in seconds
 DISCOVERY_TIMEOUT: Final = 9  # Discovery window in seconds
 DISCOVERY_BROADCAST_INTERVAL: Final = 2  # Broadcast every 2 seconds during discovery
 
 # Update intervals (in multiples of base interval)
-UPDATE_INTERVAL_FAST: Final = 1  # ES, EM status (15s)
-UPDATE_INTERVAL_MEDIUM: Final = 4  # Battery, PV, Mode (60s)
-UPDATE_INTERVAL_SLOW: Final = 20  # Device, WiFi, BLE (300s)
+UPDATE_INTERVAL_FAST: Final = 1  # ES, Battery status (60s)
+UPDATE_INTERVAL_MEDIUM: Final = 5  # EM, PV, Mode (300s)
+UPDATE_INTERVAL_SLOW: Final = 10  # Device, WiFi, BLE (600s)
 
 # Communication timeouts
 COMMAND_TIMEOUT: Final = 15  # Timeout for commands in seconds
-MAX_RETRIES: Final = 5  # Maximum retries for critical commands
+MAX_RETRIES: Final = 3  # Maximum retries for critical commands
 RETRY_DELAY: Final = 2  # Delay between retries in seconds
+COMMAND_MAX_ATTEMPTS: Final = 3  # Attempts per command before giving up
+COMMAND_BACKOFF_BASE: Final = 1.5  # Base delay for command retry backoff
+COMMAND_BACKOFF_FACTOR: Final = 2.0  # Multiplier for successive backoff delays
+COMMAND_BACKOFF_MAX: Final = 12.0  # Upper bound on backoff delay
+COMMAND_BACKOFF_JITTER: Final = 0.4  # Additional random jitter for backoff
 UNAVAILABLE_THRESHOLD: Final = 120  # Seconds before marking device unavailable
 
 # Firmware version threshold for value scaling

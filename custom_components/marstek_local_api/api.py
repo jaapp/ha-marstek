@@ -4,11 +4,17 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import random
 import socket
 from typing import Any
 from uuid import uuid4
 
 from .const import (
+    COMMAND_BACKOFF_BASE,
+    COMMAND_BACKOFF_FACTOR,
+    COMMAND_BACKOFF_JITTER,
+    COMMAND_BACKOFF_MAX,
+    COMMAND_MAX_ATTEMPTS,
     COMMAND_TIMEOUT,
     DEFAULT_PORT,
     DISCOVERY_BROADCAST_INTERVAL,
@@ -54,6 +60,7 @@ class MarstekUDPClient:
         self.protocol: MarstekProtocol | None = None
         self._handlers: list = []
         self._connected = False
+        self._stale_message_counter = 0
 
     async def connect(self) -> None:
         """Connect to the UDP socket."""
@@ -213,15 +220,20 @@ class MarstekUDPClient:
             "method": method,
             "params": params,
         }
+        payload_str = json.dumps(payload)
 
         _LOGGER.debug(
             "Sending command: method=%s, id=%s, host=%s, port=%s, transport=%s",
             method, msg_id, self.host, self.remote_port, self.transport is not None
         )
 
-        # Create event for response
+        # Shared response tracking for all attempts
         response_event = asyncio.Event()
-        response_data = {}
+        response_data: dict[str, Any] = {}
+        last_exception: Exception | None = None
+
+        # Allow the event loop to process any pending datagrams before we start
+        await asyncio.sleep(0)
 
         def handler(message, addr):
             """Handle command response."""
@@ -230,44 +242,110 @@ class MarstekUDPClient:
                     _LOGGER.debug("Ignoring response from wrong host: %s (expected %s)", addr[0], self.host)
                     return  # Wrong device
                 _LOGGER.debug("Matched response for %s from %s", method, addr)
+                response_data.clear()
                 response_data.update(message)
                 response_event.set()
+            else:
+                # Track stray messages so we know if queues are backing up
+                self._stale_message_counter += 1
+                if self._stale_message_counter <= 5 or self._stale_message_counter % 25 == 0:
+                    _LOGGER.debug(
+                        "Ignoring stale message while waiting for %s: got id=%s from %s (total stales=%d)",
+                        method,
+                        message.get("id"),
+                        addr[0],
+                        self._stale_message_counter,
+                    )
 
         # Register temporary handler
         self.register_handler(handler)
 
         try:
-            # Send command
-            payload_str = json.dumps(payload)
-            _LOGGER.debug("Sending payload to %s:%s: %s", self.host or "broadcast", self.remote_port, payload_str)
-            await self._send_to_host(payload_str)
+            loop = asyncio.get_running_loop()
 
-            # Wait for response
-            await asyncio.wait_for(response_event.wait(), timeout=timeout)
+            for attempt in range(1, COMMAND_MAX_ATTEMPTS + 1):
+                response_event.clear()
+                response_data.clear()
+                attempt_started = loop.time()
 
-            if "error" in response_data:
-                error = response_data["error"]
-                raise MarstekAPIError(
-                    f"API error {error.get('code')}: {error.get('message')}"
-                )
+                try:
+                    _LOGGER.debug(
+                        "Sending payload (attempt %d/%d) to %s:%s: %s",
+                        attempt,
+                        COMMAND_MAX_ATTEMPTS,
+                        self.host or "broadcast",
+                        self.remote_port,
+                        payload_str,
+                    )
+                    # Yield once more to ensure pending packets are processed before sending
+                    await asyncio.sleep(0)
+                    await self._send_to_host(payload_str)
 
-            _LOGGER.debug("Command %s completed successfully", method)
-            return response_data.get("result")
+                    await asyncio.wait_for(response_event.wait(), timeout=timeout)
 
-        except asyncio.TimeoutError:
-            _LOGGER.warning(
-                "Command %s timed out after %ss (host=%s, transport=%s, connected=%s)",
-                method, timeout, self.host, self.transport is not None, self._connected
-            )
-            return None
-        except Exception as err:
-            _LOGGER.error(
-                "Error sending command %s to %s: %s",
-                method, self.host, err, exc_info=True
-            )
-            raise
+                    if "error" in response_data:
+                        error = response_data["error"]
+                        raise MarstekAPIError(
+                            f"API error {error.get('code')}: {error.get('message')}"
+                        )
+
+                    latency = loop.time() - attempt_started
+                    self._stale_message_counter = 0
+                    _LOGGER.debug(
+                        "Command %s completed successfully in %.2fs (attempt %d)",
+                        method,
+                        latency,
+                        attempt,
+                    )
+                    return response_data.get("result")
+
+                except asyncio.TimeoutError:
+                    _LOGGER.warning(
+                        "Command %s timed out after %ss (attempt %d/%d, host=%s)",
+                        method,
+                        timeout,
+                        attempt,
+                        COMMAND_MAX_ATTEMPTS,
+                        self.host,
+                    )
+                    last_exception = None
+                except MarstekAPIError:
+                    raise
+                except Exception as err:
+                    _LOGGER.error(
+                        "Error sending command %s to %s on attempt %d/%d: %s",
+                        method,
+                        self.host,
+                        attempt,
+                        COMMAND_MAX_ATTEMPTS,
+                        err,
+                        exc_info=True,
+                    )
+                    last_exception = err
+
+                if attempt < COMMAND_MAX_ATTEMPTS:
+                    delay = self._compute_backoff_delay(attempt)
+                    _LOGGER.debug(
+                        "Waiting %.2fs before retrying %s (attempt %d/%d)",
+                        delay,
+                        method,
+                        attempt + 1,
+                        COMMAND_MAX_ATTEMPTS,
+                    )
+                    await asyncio.sleep(delay)
+
         finally:
             self.unregister_handler(handler)
+
+        if last_exception:
+            raise last_exception
+
+        _LOGGER.error(
+            "Command %s failed after %d attempt(s); returning no result",
+            method,
+            COMMAND_MAX_ATTEMPTS,
+        )
+        return None
 
     async def _send_to_host(self, message: str) -> None:
         """Send message to specific host or broadcast."""
@@ -283,6 +361,14 @@ class MarstekUDPClient:
         else:
             # Broadcast
             await self.broadcast(message)
+
+    def _compute_backoff_delay(self, attempt: int) -> float:
+        """Compute exponential backoff with jitter for retries."""
+        base_delay = COMMAND_BACKOFF_BASE * (COMMAND_BACKOFF_FACTOR ** (attempt - 1))
+        capped = min(base_delay, COMMAND_BACKOFF_MAX)
+        if COMMAND_BACKOFF_JITTER > 0:
+            return capped + random.uniform(0, COMMAND_BACKOFF_JITTER)
+        return capped
 
     async def broadcast(self, message: str) -> None:
         """Broadcast a message."""

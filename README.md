@@ -41,7 +41,8 @@ Home Assistant integration for Marstek energy storage systems using the official
 - **Operating Mode Control**: Switch between Auto, AI, Manual, and Passive modes
 - **Energy Dashboard Integration**: Built-in support for Home Assistant Energy Dashboard
 - **Automatic Discovery**: Finds Marstek devices on your network automatically
-- **Tiered Polling**: Optimized update intervals for different sensor types
+- **Tiered Polling**: Optimized 60 s / 300 s / 600 s refresh tiers per sensor category
+- **Adaptive Retries**: UDP command retries with exponential backoff to avoid flooding the device
 
 ## Supported Devices
 
@@ -116,53 +117,16 @@ The integration creates the following entities:
 
 ### Sensors
 
-**Battery**
-- State of Charge (%)
-- Temperature (°C)
-- Remaining Capacity (Wh)
-- Rated Capacity (Wh)
-- Available Capacity (Wh)
-- Battery Power (W)
-- Battery Power In (W)
-- Battery Power Out (W)
-- Battery State (charging/discharging/idle)
-
-**Energy System**
-- Grid Power (W)
-- Off-Grid Power (W)
-- Solar Power (W)
-- Total Solar Energy (Wh)
-- Total Grid Import (Wh)
-- Total Grid Export (Wh)
-- Total Load Energy (Wh)
-
-**Energy Meter / CT**
-- Phase A Power (W)
-- Phase B Power (W)
-- Phase C Power (W)
-- Total Power (W)
-
-**Solar (Venus D only)**
-- PV Power (W)
-- PV Voltage (V)
-- PV Current (A)
-
-**Network**
-- WiFi Signal Strength (dBm)
-- WiFi SSID
-- WiFi IP Address
-- WiFi Gateway
-- WiFi Subnet Mask
-- WiFi DNS Server
-
-**Device**
-- Device Model
-- Firmware Version
-- Bluetooth MAC
-- WiFi MAC
-- Device IP Address
-- Operating Mode
-- Last Message Received (seconds)
+| Category | Entities | Refresh cadence |
+| --- | --- | --- |
+| **Energy system (ES)** | Battery Power<br>Battery Power In / Out<br>Battery State<br>Grid Power<br>Off-Grid Power<br>Solar Power<br>Total PV / Grid / Load Energy | Every 60 s |
+| **Battery** | State of Charge<br>Temperature<br>Remaining Capacity<br>Rated Capacity<br>Available Capacity | Every 60 s |
+| **Operating mode** | Operating Mode | Every 300 s |
+| **Energy meter / CT (EM)** | Phase A Power<br>Phase B Power<br>Phase C Power<br>Total Power | Every 300 s |
+| **Solar (Venus D only)** | PV Power<br>PV Voltage<br>PV Current | Every 300 s |
+| **Network** | WiFi Signal Strength<br>SSID<br>IP Address<br>Gateway<br>Subnet<br>DNS | Every 600 s |
+| **Device** | Device Model<br>Firmware Version<br>Bluetooth MAC<br>WiFi MAC<br>Device IP | Every 600 s |
+| **Diagnostics** | Last Message Received (seconds) | Every 600 s |
 
 ### Binary Sensors
 
@@ -209,14 +173,6 @@ Home Assistant will automatically convert these power sensors to cumulative ener
 Go to Settings → Dashboards → Energy → Add Individual Device
 
 - **Home Consumption:** `sensor.marstek_total_load_energy`
-
-## Polling Strategy
-
-The integration uses an optimized tiered polling strategy to minimize network traffic:
-
-- **Every 15s**: Energy System, Energy Meter (real-time power data)
-- **Every 60s**: Battery, Solar, Operating Mode
-- **Every 300s**: Device info, WiFi, Bluetooth (static data)
 
 ## Firmware Version Handling
 
@@ -340,3 +296,8 @@ Based on:
 ## License
 
 This project is licensed under the MIT License.
+### Update Cadence & Retries
+
+- Default refresh interval is 60 seconds; you can choose any value between 60 s and 900 s in the integration options.
+- Fast tier (power/energy telemetry) updates every cycle, medium tier (battery/PV/mode) every 5th cycle (~300 s), slow diagnostics every 10th cycle (~600 s).
+- All UDP commands include a capped exponential backoff with jitter to drain stale packets and minimise queue pressure.

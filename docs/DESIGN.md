@@ -332,20 +332,20 @@ class MarstekLocalAPI:
 ### Coordinator Pattern
 ```python
 class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
-    update_interval = 15 seconds (base interval)
+    update_interval = 60 seconds (base interval)
 
     async def _async_update_data():
         # See "Polling Strategy" section for tiered polling implementation
-        # High priority (15s): ES, EM
-        # Medium priority (60s): Battery, PV, Mode
-        # Low priority (300s): Device, WiFi, BLE
+        # High priority (60s): ES, Battery
+        # Medium priority (300s): EM, PV, Mode
+        # Low priority (600s): Device, WiFi, BLE
         return data
 ```
 
 ### Update Intervals
-- **Fast poll** (15s): ES, EM status - real-time power/energy
-- **Medium poll** (60s): Battery, PV, Mode - slower-changing data
-- **Slow poll** (300s): Device, WiFi, BLE - static/diagnostic data
+- **Fast poll** (60s): ES & Battery status — real-time power/energy
+- **Medium poll** (300s): EM, PV, Mode — slower-changing data
+- **Slow poll** (600s): Device, WiFi, BLE — static/diagnostic data
 
 ---
 
