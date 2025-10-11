@@ -9,7 +9,6 @@ import socket
 import time
 from copy import deepcopy
 from typing import Any
-from uuid import uuid4
 
 from .const import (
     ALL_API_METHODS,
@@ -66,6 +65,7 @@ class MarstekUDPClient:
         self._connected = False
         self._stale_message_counter = 0
         self._command_stats: dict[str, dict[str, Any]] = {}
+        self._msg_id_counter = 0  # Counter for integer message IDs
 
     async def connect(self) -> None:
         """Connect to the UDP socket."""
@@ -224,8 +224,9 @@ class MarstekUDPClient:
         if params is None:
             params = {"id": 0}
 
-        # Generate unique message ID
-        msg_id = f"homeassistant-{uuid4().hex[:8]}"
+        # Generate unique integer message ID (required for Venus E firmware V139+)
+        self._msg_id_counter = (self._msg_id_counter + 1) % 1000000  # Wrap at 1 million
+        msg_id = self._msg_id_counter
         payload = {
             "id": msg_id,
             "method": method,
@@ -617,10 +618,10 @@ class MarstekUDPClient:
             """Handle discovery responses."""
             msg_id = message.get("id")
             has_result = "result" in message
-            _LOGGER.debug("Discovery handler called: id=%s, expected=homeassistant-discover, match=%s, has_result=%s",
-                         msg_id, msg_id == "homeassistant-discover", has_result)
+            _LOGGER.debug("Discovery handler called: id=%s, expected=0, match=%s, has_result=%s",
+                         msg_id, msg_id == 0, has_result)
 
-            if msg_id == "homeassistant-discover" and has_result:
+            if msg_id == 0 and has_result:
                 result = message["result"]
                 wifi_mac = result.get("wifi_mac")
                 ble_mac = result.get("ble_mac")
@@ -666,7 +667,7 @@ class MarstekUDPClient:
             # Broadcast discovery message repeatedly on all networks
             end_time = asyncio.get_event_loop().time() + timeout
             message = json.dumps({
-                "id": "homeassistant-discover",
+                "id": 0,
                 "method": METHOD_GET_DEVICE,
                 "params": {"ble_mac": "0"}
             })
