@@ -10,7 +10,7 @@ from homeassistant.helpers.redact import async_redact_data
 from .const import DATA_COORDINATOR, DOMAIN
 from .coordinator import MarstekDataUpdateCoordinator, MarstekMultiDeviceCoordinator
 
-TO_REDACT = ["wifi_name"]
+TO_REDACT = ["wifi_name", "ssid"]
 
 
 def _command_compatibility_summary(command_stats: dict[str, Any]) -> dict[str, Any]:
