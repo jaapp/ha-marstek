@@ -5,9 +5,12 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.redact import async_redact_data
 
 from .const import DATA_COORDINATOR, DOMAIN
 from .coordinator import MarstekDataUpdateCoordinator, MarstekMultiDeviceCoordinator
+
+TO_REDACT = ["wifi_name"]
 
 
 def _command_compatibility_summary(command_stats: dict[str, Any]) -> dict[str, Any]:
@@ -49,12 +52,13 @@ def _coordinator_snapshot(coordinator: MarstekDataUpdateCoordinator) -> dict[str
     command_stats = _command_stats_snapshot(coordinator)
     compatibility_summary = _command_compatibility_summary(command_stats)
 
-    return {
+    snapshot = {
         # Device identification
         "device_model": device_info.get("device") or coordinator.device_model,
         "firmware_version": device_info.get("ver") or coordinator.firmware_version,
         "ble_mac": device_info.get("ble_mac"),
         "wifi_mac": device_info.get("wifi_mac"),
+        "wifi_name": device_info.get("wifi_name"),
         "device_ip": device_info.get("ip"),
 
         # Coordinator info
@@ -73,6 +77,8 @@ def _coordinator_snapshot(coordinator: MarstekDataUpdateCoordinator) -> dict[str
         "command_compatibility": command_stats,
         "compatibility_summary": compatibility_summary,
     }
+
+    return async_redact_data(snapshot, TO_REDACT)
 
 
 def _multi_diagnostics(coordinator: MarstekMultiDeviceCoordinator) -> dict[str, Any]:
