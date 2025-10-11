@@ -7,6 +7,7 @@ import logging
 import random
 import socket
 import time
+from copy import deepcopy
 from typing import Any
 from uuid import uuid4
 
@@ -471,7 +472,7 @@ class MarstekUDPClient:
         stats["last_updated"] = time.time()
         if success:
             stats["last_success_at"] = stats["last_updated"]
-            stats["last_success_payload"] = response
+            stats["last_success_payload"] = deepcopy(response) if response is not None else None
 
         # Track "Method not found" errors to detect unsupported commands
         if error_code == ERROR_METHOD_NOT_FOUND:
