@@ -63,6 +63,9 @@ def _coordinator_snapshot(coordinator: MarstekDataUpdateCoordinator) -> dict[str
         "update_count": coordinator.update_count,
         "last_update_started": coordinator._last_update_start,  # pylint: disable=protected-access
 
+        # Current sensor data
+        "sensor_data": coordinator.data,
+
         # Diagnostic payload
         "diagnostic_payload": diagnostic_payload,
 

@@ -445,6 +445,7 @@ class MarstekUDPClient:
                 "last_error_code": None,
                 "last_updated": None,
                 "last_success_at": None,
+                "last_success_payload": None,
                 "unsupported_error_count": 0,
                 "supported": None,  # None=unknown, True=supported, False=unsupported
             },
@@ -468,6 +469,7 @@ class MarstekUDPClient:
         stats["last_updated"] = time.time()
         if success:
             stats["last_success_at"] = stats["last_updated"]
+            stats["last_success_payload"] = response
 
         # Track "Method not found" errors to detect unsupported commands
         if error_code == ERROR_METHOD_NOT_FOUND:
@@ -504,6 +506,7 @@ class MarstekUDPClient:
                     "last_error_code": None,
                     "last_updated": None,
                     "last_success_at": None,
+                    "last_success_payload": None,
                     "unsupported_error_count": 0,
                     "supported": None,
                 }
