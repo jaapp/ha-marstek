@@ -11,6 +11,7 @@ from typing import Any
 from uuid import uuid4
 
 from .const import (
+    ALL_API_METHODS,
     COMMAND_BACKOFF_BASE,
     COMMAND_BACKOFF_FACTOR,
     COMMAND_BACKOFF_JITTER,
@@ -20,6 +21,7 @@ from .const import (
     DEFAULT_PORT,
     DISCOVERY_BROADCAST_INTERVAL,
     DISCOVERY_TIMEOUT,
+    ERROR_METHOD_NOT_FOUND,
     METHOD_BATTERY_STATUS,
     METHOD_BLE_STATUS,
     METHOD_EM_STATUS,
@@ -293,8 +295,20 @@ class MarstekUDPClient:
 
                     if "error" in response_data:
                         error = response_data["error"]
+                        error_code = error.get('code')
+                        error_msg = error.get('message')
+                        # Record the error with its code for diagnostics
+                        self._record_command_result(
+                            method,
+                            success=False,
+                            attempt=attempt,
+                            latency=None,
+                            timeout=False,
+                            error=error_msg,
+                            error_code=error_code,
+                        )
                         raise MarstekAPIError(
-                            f"API error {error.get('code')}: {error.get('message')}"
+                            f"API error {error_code}: {error_msg}"
                         )
 
                     latency = loop.time() - attempt_started
@@ -306,6 +320,7 @@ class MarstekUDPClient:
                         latency=latency,
                         timeout=False,
                         error=None,
+                        error_code=None,
                     )
                     _LOGGER.debug(
                         "Command %s completed successfully in %.2fs (attempt %d)",
@@ -334,14 +349,7 @@ class MarstekUDPClient:
                     )
                     last_exception = None
                 except MarstekAPIError:
-                    self._record_command_result(
-                        method,
-                        success=False,
-                        attempt=attempt,
-                        latency=None,
-                        timeout=False,
-                        error="api_error",
-                    )
+                    # Error already recorded in the if "error" block above
                     raise
                 except Exception as err:
                     self._record_command_result(
@@ -419,6 +427,7 @@ class MarstekUDPClient:
         latency: float | None,
         timeout: bool,
         error: str | None,
+        error_code: int | None = None,
     ) -> None:
         """Track command attempt statistics for diagnostics."""
         stats = self._command_stats.setdefault(
@@ -433,14 +442,18 @@ class MarstekUDPClient:
                 "last_latency": None,
                 "last_timeout": False,
                 "last_error": None,
+                "last_error_code": None,
                 "last_updated": None,
                 "last_success_at": None,
+                "unsupported_error_count": 0,
+                "supported": None,  # None=unknown, True=supported, False=unsupported
             },
         )
 
         stats["total_attempts"] += 1
         if success:
             stats["total_success"] += 1
+            stats["supported"] = True  # Command works on this device
         elif timeout:
             stats["total_timeouts"] += 1
         else:
@@ -451,9 +464,17 @@ class MarstekUDPClient:
         stats["last_latency"] = latency
         stats["last_timeout"] = timeout
         stats["last_error"] = error
+        stats["last_error_code"] = error_code
         stats["last_updated"] = time.time()
         if success:
             stats["last_success_at"] = stats["last_updated"]
+
+        # Track "Method not found" errors to detect unsupported commands
+        if error_code == ERROR_METHOD_NOT_FOUND:
+            stats["unsupported_error_count"] = stats.get("unsupported_error_count", 0) + 1
+            # Mark as unsupported after 2+ method-not-found errors
+            if stats["unsupported_error_count"] >= 2:
+                stats["supported"] = False
 
     def get_command_stats(self, method: str) -> dict[str, Any] | None:
         """Return snapshot of command statistics."""
@@ -461,6 +482,32 @@ class MarstekUDPClient:
         if stats is None:
             return None
         return dict(stats)
+
+    def get_all_command_stats(self) -> dict[str, dict[str, Any]]:
+        """Return snapshot of all command statistics including never-attempted commands."""
+        all_stats = {}
+        for method in ALL_API_METHODS:
+            if method in self._command_stats:
+                all_stats[method] = dict(self._command_stats[method])
+            else:
+                # Never attempted - return default structure
+                all_stats[method] = {
+                    "total_attempts": 0,
+                    "total_success": 0,
+                    "total_timeouts": 0,
+                    "total_failures": 0,
+                    "last_success": None,
+                    "last_attempt": None,
+                    "last_latency": None,
+                    "last_timeout": False,
+                    "last_error": None,
+                    "last_error_code": None,
+                    "last_updated": None,
+                    "last_success_at": None,
+                    "unsupported_error_count": 0,
+                    "supported": None,
+                }
+        return all_stats
 
     async def broadcast(self, message: str) -> None:
         """Broadcast a message."""
