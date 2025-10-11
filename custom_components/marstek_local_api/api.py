@@ -321,6 +321,7 @@ class MarstekUDPClient:
                         timeout=False,
                         error=None,
                         error_code=None,
+                        response=response_data,
                     )
                     _LOGGER.debug(
                         "Command %s completed successfully in %.2fs (attempt %d)",
@@ -428,6 +429,7 @@ class MarstekUDPClient:
         timeout: bool,
         error: str | None,
         error_code: int | None = None,
+        response: dict[str, Any] | None = None,
     ) -> None:
         """Track command attempt statistics for diagnostics."""
         stats = self._command_stats.setdefault(
