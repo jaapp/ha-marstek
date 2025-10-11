@@ -73,6 +73,32 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.ENERGY_STORAGE,
         value_fn=lambda data: data.get("battery", {}).get("rated_capacity"),
     ),
+    MarstekSensorEntityDescription(
+        key="battery_voltage",
+        name="Voltage",
+        native_unit_of_measurement=UnitOfElectricPotential.MILLIVOLT,
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.get("battery", {}).get("bat_voltage"),
+    ),
+    MarstekSensorEntityDescription(
+        key="battery_current",
+        name="Current",
+        native_unit_of_measurement=UnitOfElectricCurrent.MILLIAMPERE,
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.get("battery", {}).get("bat_current"),
+    ),
+    MarstekSensorEntityDescription(
+        key="battery_error_code",
+        name="Error code",
+        value_fn=lambda data: data.get("battery", {}).get("error_code"),
+    ),
+    MarstekSensorEntityDescription(
+        key="battery_discharge_flag",
+        name="Discharge flag",
+        value_fn=lambda data: data.get("battery", {}).get("dischrg_flag"),
+    ),
     # Energy System sensors
     MarstekSensorEntityDescription(
         key="battery_power",
@@ -211,6 +237,11 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: data.get("em", {}).get("total_power"),
+    ),
+    MarstekSensorEntityDescription(
+        key="ct_parse_state",
+        name="CT parse state",
+        value_fn=lambda data: data.get("em", {}).get("parse_state"),
     ),
     # WiFi sensors
     MarstekSensorEntityDescription(
