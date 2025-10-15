@@ -12,10 +12,10 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import MarstekAPIError, MarstekUDPClient
+from .compatibility import CompatibilityMatrix
 from .const import (
     DEFAULT_SCAN_INTERVAL,
     DEVICE_MODEL_VENUS_D,
-    FIRMWARE_THRESHOLD,
     UPDATE_INTERVAL_FAST,
     UPDATE_INTERVAL_MEDIUM,
     UPDATE_INTERVAL_SLOW,
@@ -251,6 +251,12 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
         self.poll_jitter = random.uniform(0.2, jitter_cap)
         self._last_update_start: float | None = None
 
+        # Initialize compatibility matrix for version-specific scaling
+        self.compatibility = CompatibilityMatrix(
+            device_model=device_model,
+            firmware_version=firmware_version,
+        )
+
         super().__init__(
             hass,
             _LOGGER,
@@ -258,32 +264,40 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(seconds=scan_interval),
         )
 
-    def _scale_value(self, value: float | None, field: str) -> float | None:
-        """Scale values based on firmware version."""
-        if value is None:
-            return None
+    def _update_device_version(self, device_info: dict) -> None:
+        """Update device firmware/hardware version and reinitialize compatibility matrix if changed.
 
-        # Firmware-specific scaling based on design doc
-        if self.firmware_version >= FIRMWARE_THRESHOLD:
-            scaling = {
-                "bat_temp": 0.1,
-                "bat_capacity": 1.0,
-                "bat_power": 1.0,
-                "total_grid_input_energy": 0.01,
-                "total_grid_output_energy": 0.01,
-                "total_load_energy": 0.01,
-            }
-        else:
-            scaling = {
-                "bat_temp": 1.0,
-                "bat_capacity": 100.0,
-                "bat_power": 10.0,
-                "total_grid_input_energy": 0.1,
-                "total_grid_output_energy": 0.1,
-                "total_load_energy": 0.1,
-            }
+        Args:
+            device_info: Device info dictionary containing 'ver' (firmware) and 'device' (model)
+        """
+        new_firmware = device_info.get("ver")
+        new_model = device_info.get("device")
 
-        return value / scaling.get(field, 1.0)
+        firmware_changed = new_firmware is not None and new_firmware != self.firmware_version
+        model_changed = new_model is not None and new_model != self.device_model
+
+        if firmware_changed or model_changed:
+            if firmware_changed:
+                _LOGGER.info(
+                    "Firmware version changed from %d to %d, reinitializing compatibility matrix",
+                    self.firmware_version,
+                    new_firmware,
+                )
+                self.firmware_version = new_firmware
+
+            if model_changed:
+                _LOGGER.info(
+                    "Device model changed from %s to %s, reinitializing compatibility matrix",
+                    self.device_model,
+                    new_model,
+                )
+                self.device_model = new_model
+
+            # Reinitialize compatibility matrix with new version(s)
+            self.compatibility = CompatibilityMatrix(
+                device_model=self.device_model,
+                firmware_version=self.firmware_version,
+            )
 
     def _get_seconds_since_last_message(self) -> int | None:
         """Get seconds since last successful message (Design Doc §556-576)."""
@@ -338,6 +352,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                     device_info = await self.api.get_device_info()
                     if device_info:
                         data["device"] = device_info
+                        self._update_device_version(device_info)
                 except Exception as err:
                     _LOGGER.warning("Failed to get device info on first update: %s", err)
 
@@ -353,19 +368,19 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
             if es_status:
                 # Scale firmware-dependent values
                 if "bat_power" in es_status:
-                    es_status["bat_power"] = self._scale_value(
+                    es_status["bat_power"] = self.compatibility.scale_value(
                         es_status["bat_power"], "bat_power"
                     )
                 if "total_grid_input_energy" in es_status:
-                    es_status["total_grid_input_energy"] = self._scale_value(
+                    es_status["total_grid_input_energy"] = self.compatibility.scale_value(
                         es_status["total_grid_input_energy"], "total_grid_input_energy"
                     )
                 if "total_grid_output_energy" in es_status:
-                    es_status["total_grid_output_energy"] = self._scale_value(
+                    es_status["total_grid_output_energy"] = self.compatibility.scale_value(
                         es_status["total_grid_output_energy"], "total_grid_output_energy"
                     )
                 if "total_load_energy" in es_status:
-                    es_status["total_load_energy"] = self._scale_value(
+                    es_status["total_load_energy"] = self.compatibility.scale_value(
                         es_status["total_load_energy"], "total_load_energy"
                     )
 
@@ -379,14 +394,22 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                 battery_status = None
 
             if battery_status:
-                # Scale firmware-dependent values
+                # Scale firmware/hardware-dependent values
                 if "bat_temp" in battery_status:
-                    battery_status["bat_temp"] = self._scale_value(
+                    battery_status["bat_temp"] = self.compatibility.scale_value(
                         battery_status["bat_temp"], "bat_temp"
                     )
                 if "bat_capacity" in battery_status:
-                    battery_status["bat_capacity"] = self._scale_value(
+                    battery_status["bat_capacity"] = self.compatibility.scale_value(
                         battery_status["bat_capacity"], "bat_capacity"
+                    )
+                if "bat_voltage" in battery_status:
+                    battery_status["bat_voltage"] = self.compatibility.scale_value(
+                        battery_status["bat_voltage"], "bat_voltage"
+                    )
+                if "bat_current" in battery_status:
+                    battery_status["bat_current"] = self.compatibility.scale_value(
+                        battery_status["bat_current"], "bat_current"
                     )
                 data["battery"] = battery_status
 
@@ -428,6 +451,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                     device_info = await self.api.get_device_info()
                     if device_info:
                         data["device"] = device_info
+                        self._update_device_version(device_info)
                 except Exception as err:
                     _LOGGER.debug("Failed to get device info: %s", err)
 

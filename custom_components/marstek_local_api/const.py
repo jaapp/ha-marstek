@@ -28,9 +28,6 @@ COMMAND_BACKOFF_MAX: Final = 12.0  # Upper bound on backoff delay
 COMMAND_BACKOFF_JITTER: Final = 0.4  # Additional random jitter for backoff
 UNAVAILABLE_THRESHOLD: Final = 120  # Seconds before marking device unavailable
 
-# Firmware version threshold for value scaling
-FIRMWARE_THRESHOLD: Final = 154
-
 # API Methods
 METHOD_GET_DEVICE: Final = "Marstek.GetDevice"
 METHOD_WIFI_STATUS: Final = "Wifi.GetStatus"

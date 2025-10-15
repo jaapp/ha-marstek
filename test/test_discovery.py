@@ -163,7 +163,6 @@ sensor_module = load_module_from_file(f"{package_name}.sensor", integration_path
 MarstekUDPClient = api_module.MarstekUDPClient
 DEFAULT_PORT = const.DEFAULT_PORT
 DEVICE_MODEL_VENUS_D = const.DEVICE_MODEL_VENUS_D
-FIRMWARE_THRESHOLD = const.FIRMWARE_THRESHOLD
 SENSOR_TYPES = sensor_module.SENSOR_TYPES
 
 
@@ -284,8 +283,7 @@ async def discover_and_test():
                 print("  ⚠️  Failed to get Bluetooth status")
             print()
 
-            # Create real coordinator instance to use actual _scale_value logic
-            # Create minimal coordinator with real scaling logic
+            # Create real coordinator instance to use actual scaling logic
             coordinator = coordinator_module.MarstekDataUpdateCoordinator(
                 hass=hass,
                 api=api,
@@ -301,9 +299,9 @@ async def discover_and_test():
             print("-" * 80)
             battery_status = await api.get_battery_status()
             if battery_status:
-                # Use real coordinator scaling logic
-                bat_temp = coordinator._scale_value(battery_status.get('bat_temp'), 'bat_temp')
-                bat_capacity = coordinator._scale_value(battery_status.get('bat_capacity'), 'bat_capacity')
+                # Use compatibility matrix scaling logic
+                bat_temp = coordinator.compatibility.scale_value(battery_status.get('bat_temp'), 'bat_temp')
+                bat_capacity = coordinator.compatibility.scale_value(battery_status.get('bat_capacity'), 'bat_capacity')
 
                 soc = battery_status.get('soc')
                 rated_capacity = battery_status.get('rated_capacity')
@@ -324,11 +322,11 @@ async def discover_and_test():
             print("-" * 80)
             es_status = await api.get_es_status()
             if es_status:
-                # Use real coordinator scaling logic
-                bat_power = coordinator._scale_value(es_status.get('bat_power'), 'bat_power')
-                total_grid_input = coordinator._scale_value(es_status.get('total_grid_input_energy'), 'total_grid_input_energy')
-                total_grid_output = coordinator._scale_value(es_status.get('total_grid_output_energy'), 'total_grid_output_energy')
-                total_load = coordinator._scale_value(es_status.get('total_load_energy'), 'total_load_energy')
+                # Use compatibility matrix scaling logic
+                bat_power = coordinator.compatibility.scale_value(es_status.get('bat_power'), 'bat_power')
+                total_grid_input = coordinator.compatibility.scale_value(es_status.get('total_grid_input_energy'), 'total_grid_input_energy')
+                total_grid_output = coordinator.compatibility.scale_value(es_status.get('total_grid_output_energy'), 'total_grid_output_energy')
+                total_load = coordinator.compatibility.scale_value(es_status.get('total_load_energy'), 'total_load_energy')
 
                 # Build data dict like the real coordinator does - only add keys if data exists
                 data = {

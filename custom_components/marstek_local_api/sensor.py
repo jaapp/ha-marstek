@@ -79,11 +79,7 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
         native_unit_of_measurement=UnitOfElectricPotential.VOLT,
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda data: (
-            data.get("battery", {}).get("bat_voltage") / 100
-            if data.get("battery", {}).get("bat_voltage") is not None
-            else None
-        ),
+        value_fn=lambda data: data.get("battery", {}).get("bat_voltage"),
     ),
     MarstekSensorEntityDescription(
         key="battery_current",
@@ -91,11 +87,7 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda data: (
-            data.get("battery", {}).get("bat_current") / 100
-            if data.get("battery", {}).get("bat_current") is not None
-            else None
-        ),
+        value_fn=lambda data: data.get("battery", {}).get("bat_current"),
     ),
     MarstekSensorEntityDescription(
         key="battery_error_code",
