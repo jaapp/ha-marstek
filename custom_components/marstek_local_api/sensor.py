@@ -40,6 +40,29 @@ class MarstekSensorEntityDescription(SensorEntityDescription):
     available_fn: Callable[[dict], bool] | None = None
 
 
+def _wh_to_kwh(value: float | int | None) -> float | None:
+    """Convert a raw value in watt-hours to kilowatt-hours."""
+    if value is None:
+        return None
+    try:
+        return float(value) / 1000
+    except (TypeError, ValueError):
+        return None
+
+
+def _available_capacity_kwh(data: dict) -> float | None:
+    """Calculate remaining capacity in kilowatt-hours."""
+    battery = data.get("battery", {})
+    soc = battery.get("soc")
+    rated = battery.get("rated_capacity")
+    if soc is None or rated is None:
+        return None
+    try:
+        return _wh_to_kwh((100 - float(soc)) * float(rated) / 100)
+    except (TypeError, ValueError):
+        return None
+
+
 SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     # Battery sensors
     MarstekSensorEntityDescription(
@@ -61,17 +84,17 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     MarstekSensorEntityDescription(
         key="battery_capacity",
         name="Remaining capacity",
-        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY_STORAGE,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda data: data.get("battery", {}).get("bat_capacity"),
+        value_fn=lambda data: _wh_to_kwh(data.get("battery", {}).get("bat_capacity")),
     ),
     MarstekSensorEntityDescription(
         key="battery_rated_capacity",
         name="Rated capacity",
-        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY_STORAGE,
-        value_fn=lambda data: data.get("battery", {}).get("rated_capacity"),
+        value_fn=lambda data: _wh_to_kwh(data.get("battery", {}).get("rated_capacity")),
     ),
     MarstekSensorEntityDescription(
         key="battery_voltage",
@@ -137,17 +160,10 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     MarstekSensorEntityDescription(
         key="battery_available_capacity",
         name="Available capacity",
-        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY_STORAGE,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda data: (
-            (100 - (data.get("battery", {}).get("soc", 0) or 0))
-            * (data.get("battery", {}).get("rated_capacity", 0) or 0)
-            / 100
-            if data.get("battery", {}).get("soc") is not None
-            and data.get("battery", {}).get("rated_capacity") is not None
-            else None
-        ),
+        value_fn=_available_capacity_kwh,
     ),
     MarstekSensorEntityDescription(
         key="grid_power",
@@ -176,34 +192,34 @@ SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     MarstekSensorEntityDescription(
         key="total_pv_energy",
         name="Total solar energy",
-        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
-        value_fn=lambda data: data.get("es", {}).get("total_pv_energy"),
+        value_fn=lambda data: _wh_to_kwh(data.get("es", {}).get("total_pv_energy")),
     ),
     MarstekSensorEntityDescription(
         key="total_grid_import",
         name="Total grid import",
-        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
-        value_fn=lambda data: data.get("es", {}).get("total_grid_input_energy"),
+        value_fn=lambda data: _wh_to_kwh(data.get("es", {}).get("total_grid_input_energy")),
     ),
     MarstekSensorEntityDescription(
         key="total_grid_export",
         name="Total grid export",
-        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
-        value_fn=lambda data: data.get("es", {}).get("total_grid_output_energy"),
+        value_fn=lambda data: _wh_to_kwh(data.get("es", {}).get("total_grid_output_energy")),
     ),
     MarstekSensorEntityDescription(
         key="total_load_energy",
         name="Total load energy",
-        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
-        value_fn=lambda data: data.get("es", {}).get("total_load_energy"),
+        value_fn=lambda data: _wh_to_kwh(data.get("es", {}).get("total_load_energy")),
     ),
     # Energy Meter / CT sensors
     MarstekSensorEntityDescription(
@@ -377,25 +393,25 @@ AGGREGATE_SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     MarstekSensorEntityDescription(
         key="system_total_rated_capacity",
         name="Total rated capacity",
-        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY_STORAGE,
-        value_fn=lambda data: data.get("aggregates", {}).get("total_rated_capacity"),
+        value_fn=lambda data: _wh_to_kwh(data.get("aggregates", {}).get("total_rated_capacity")),
     ),
     MarstekSensorEntityDescription(
         key="system_total_remaining_capacity",
         name="Total remaining capacity",
-        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY_STORAGE,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda data: data.get("aggregates", {}).get("total_remaining_capacity"),
+        value_fn=lambda data: _wh_to_kwh(data.get("aggregates", {}).get("total_remaining_capacity")),
     ),
     MarstekSensorEntityDescription(
         key="system_total_available_capacity",
         name="Total available capacity",
-        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY_STORAGE,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda data: data.get("aggregates", {}).get("total_available_capacity"),
+        value_fn=lambda data: _wh_to_kwh(data.get("aggregates", {}).get("total_available_capacity")),
     ),
     MarstekSensorEntityDescription(
         key="system_average_soc",
@@ -421,10 +437,10 @@ AGGREGATE_SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     MarstekSensorEntityDescription(
         key="system_total_pv_energy",
         name="Total solar energy",
-        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
-        value_fn=lambda data: data.get("aggregates", {}).get("total_pv_energy"),
+        value_fn=lambda data: _wh_to_kwh(data.get("aggregates", {}).get("total_pv_energy")),
     ),
     MarstekSensorEntityDescription(
         key="system_total_grid_power",
@@ -437,26 +453,26 @@ AGGREGATE_SENSOR_TYPES: tuple[MarstekSensorEntityDescription, ...] = (
     MarstekSensorEntityDescription(
         key="system_total_grid_import",
         name="Total grid import",
-        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
-        value_fn=lambda data: data.get("aggregates", {}).get("total_grid_import"),
+        value_fn=lambda data: _wh_to_kwh(data.get("aggregates", {}).get("total_grid_import")),
     ),
     MarstekSensorEntityDescription(
         key="system_total_grid_export",
         name="Total grid export",
-        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
-        value_fn=lambda data: data.get("aggregates", {}).get("total_grid_export"),
+        value_fn=lambda data: _wh_to_kwh(data.get("aggregates", {}).get("total_grid_export")),
     ),
     MarstekSensorEntityDescription(
         key="system_total_load_energy",
         name="Total load energy",
-        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
-        value_fn=lambda data: data.get("aggregates", {}).get("total_load_energy"),
+        value_fn=lambda data: _wh_to_kwh(data.get("aggregates", {}).get("total_load_energy")),
     ),
     MarstekSensorEntityDescription(
         key="system_total_offgrid_power",
