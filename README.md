@@ -111,6 +111,18 @@ You can call the service from **Developer Tools → Services** when you need an 
       custom_components.marstek_local_api: debug
   ```
 
+### Standalone connectivity test
+
+In the repository you’ll find `test/test_discovery.py`, a small CLI that reuses the integration code to probe connectivity outside Home Assistant:
+
+```bash
+cd test
+python3 test_discovery.py              # broadcast discovery
+python3 test_discovery.py 192.168.7.101  # target a specific battery
+```
+
+It discovers all reachable batteries, exercises every Local API method, and highlights network issues before you wire the devices into your HA instance.
+
 ---
 
 ## 8. Release Notes

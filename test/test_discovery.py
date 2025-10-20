@@ -44,6 +44,19 @@ if not integration_path.exists():
 # Create a fake package structure to allow relative imports
 package_name = "custom_components.marstek_local_api"
 
+# Ensure package hierarchy exists for relative imports
+custom_components_pkg = sys.modules.get("custom_components")
+if custom_components_pkg is None:
+    custom_components_pkg = type(sys)("custom_components")
+    custom_components_pkg.__path__ = [str(integration_path.parent)]
+    sys.modules["custom_components"] = custom_components_pkg
+
+marstek_pkg = sys.modules.get(package_name)
+if marstek_pkg is None:
+    marstek_pkg = type(sys)(package_name)
+    marstek_pkg.__path__ = [str(integration_path)]
+    sys.modules[package_name] = marstek_pkg
+
 # Mock homeassistant modules that are imported by integration
 # Create a mock HomeAssistant class and other required classes
 class MockHomeAssistant:
@@ -130,7 +143,7 @@ homeassistant_const = type(sys)('homeassistant.const')
 homeassistant_const.PERCENTAGE = "%"
 homeassistant_const.UnitOfElectricCurrent = type('UnitOfElectricCurrent', (), {'AMPERE': 'A'})()
 homeassistant_const.UnitOfElectricPotential = type('UnitOfElectricPotential', (), {'VOLT': 'V'})()
-homeassistant_const.UnitOfEnergy = type('UnitOfEnergy', (), {'WATT_HOUR': 'Wh'})()
+homeassistant_const.UnitOfEnergy = type('UnitOfEnergy', (), {'WATT_HOUR': 'Wh', 'KILO_WATT_HOUR': 'kWh'})()
 homeassistant_const.UnitOfPower = type('UnitOfPower', (), {'WATT': 'W'})()
 homeassistant_const.UnitOfTemperature = type('UnitOfTemperature', (), {'CELSIUS': '°C'})()
 homeassistant_const.UnitOfTime = type('UnitOfTime', (), {'SECONDS': 's'})()
@@ -416,6 +429,10 @@ async def discover_and_test():
                     print("  ⚠️  Failed to get PV status")
                 print()
 
+    except PermissionError as err:
+        print(f"❌ Unable to open UDP socket on port {DEFAULT_PORT}: {err}")
+        print("   Try running with elevated privileges or adjust firewall settings.")
+        return
     except Exception as e:
         print(f"❌ Error during testing: {e}")
         import traceback
