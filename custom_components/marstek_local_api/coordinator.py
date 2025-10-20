@@ -151,15 +151,25 @@ class MarstekMultiDeviceCoordinator(DataUpdateCoordinator):
             d.get("es", {}).get("bat_power", 0) or 0
             for d in all_device_data
         ]
-        charging = [p > 0 for p in power_values]
-        discharging = [p < 0 for p in power_values]
+        charging_flags = [p > 0 for p in power_values]
+        discharging_flags = [p < 0 for p in power_values]
+        idle_flags = [p == 0 for p in power_values]
 
-        if all(charging):
+        has_charging = any(charging_flags)
+        has_discharging = any(discharging_flags)
+
+        if has_charging and not has_discharging and all(charging_flags):
             aggregates["combined_state"] = "charging"
-        elif all(discharging):
+        elif has_discharging and not has_charging and all(discharging_flags):
             aggregates["combined_state"] = "discharging"
-        elif any(charging) or any(discharging):
-            aggregates["combined_state"] = "mixed"
+        elif all(idle_flags):
+            aggregates["combined_state"] = "idle"
+        elif has_charging and has_discharging:
+            aggregates["combined_state"] = "conflicting"
+        elif has_charging:
+            aggregates["combined_state"] = "partly_charging"
+        elif has_discharging:
+            aggregates["combined_state"] = "partly_discharging"
         else:
             aggregates["combined_state"] = "idle"
 
