@@ -40,11 +40,56 @@
     "step": {
       "init": {
         "title": "Marstek Local API Options",
-        "description": "Configure update intervals and settings",
+        "description": "Select what you want to configure",
+        "data": {
+          "action": "Action"
+        }
+      },
+      "scan_interval": {
+        "title": "Update Interval",
+        "description": "Configure how often data is refreshed",
         "data": {
           "scan_interval": "Update Interval (seconds)"
         }
+      },
+      "rename_device": {
+        "title": "Rename Device",
+        "description": "Update how the device appears in Home Assistant",
+        "data": {
+          "device": "Device",
+          "name": "New name"
+        }
+      },
+      "remove_device": {
+        "title": "Remove Device",
+        "description": "Select a device to remove from this integration",
+        "data": {
+          "device": "Device"
+        }
+      },
+      "add_device": {
+        "title": "Add Device",
+        "description": "Select a discovered device or choose manual entry",
+        "data": {
+          "device": "Device"
+        }
+      },
+      "add_device_manual": {
+        "title": "Manual Device Entry",
+        "description": "Enter the connection details for the device",
+        "data": {
+          "host": "IP Address",
+          "port": "Port"
+        }
       }
+    },
+    "error": {
+      "invalid_name": "Provide a valid name",
+      "cannot_remove_last_device": "At least one device must remain configured",
+      "device_already_configured": "This device is already configured",
+      "device_not_found": "Selected device not found",
+      "cannot_connect": "Failed to connect to device",
+      "unknown": "Unexpected error"
     }
   }
 }

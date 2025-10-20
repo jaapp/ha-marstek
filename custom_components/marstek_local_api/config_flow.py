@@ -1,6 +1,7 @@
 """Config flow for Marstek Local API integration."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -9,10 +10,11 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.components import dhcp
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST, CONF_NAME
+from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import config_validation as cv
 
 from .api import MarstekAPIError, MarstekUDPClient
 from .const import CONF_PORT, DATA_COORDINATOR, DEFAULT_PORT, DEFAULT_SCAN_INTERVAL, DOMAIN
@@ -343,21 +345,64 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @staticmethod
     def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
         """Get the options flow for this handler."""
-        return OptionsFlow()
+        return OptionsFlow(config_entry)
 
 
 class OptionsFlow(config_entries.OptionsFlow):
     """Handle options flow for Marstek Local API."""
 
+    def __init__(self, config_entry: ConfigEntry) -> None:
+        """Initialise the options flow."""
+        self.config_entry = config_entry
+        self._devices: list[dict[str, Any]] = list(config_entry.data.get("devices", []))
+        self._discovered_devices: list[dict[str, Any]] = []
+
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Manage the options."""
+        """Entry-point for options flow; present available actions."""
+        actions: dict[str, str] = {
+            "scan_interval": "Adjust update interval",
+        }
+
+        if self._devices:
+            actions.update(
+                {
+                    "rename_device": "Rename a device",
+                    "remove_device": "Remove a device",
+                    "add_device": "Add a device",
+                }
+            )
+
+        if user_input is not None:
+            action = user_input["action"]
+            if action == "scan_interval":
+                return await self.async_step_scan_interval()
+            if action == "rename_device":
+                return await self.async_step_rename_device()
+            if action == "remove_device":
+                return await self.async_step_remove_device()
+            if action == "add_device":
+                return await self.async_step_add_device()
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("action"): vol.In(actions),
+                }
+            ),
+        )
+
+    async def async_step_scan_interval(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Adjust polling interval."""
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
         return self.async_show_form(
-            step_id="init",
+            step_id="scan_interval",
             data_schema=vol.Schema(
                 {
                     vol.Optional(
@@ -369,6 +414,303 @@ class OptionsFlow(config_entries.OptionsFlow):
                 }
             ),
         )
+
+    async def async_step_rename_device(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Rename an existing device in a multi-device configuration."""
+        if not self._devices:
+            return self.async_abort(reason="unknown")
+
+        errors: dict[str, str] = {}
+
+        device_options = {
+            idx: f"{device.get('device', f'Device {idx + 1}')} ({device.get('host')}:{device.get('port')})"
+            for idx, device in enumerate(self._devices)
+        }
+
+        if user_input is not None:
+            device_index = user_input["device"]
+            new_name: str = user_input["name"].strip()
+
+            if not new_name:
+                errors["name"] = "invalid_name"
+            elif device_index >= len(self._devices):
+                errors["base"] = "device_not_found"
+            else:
+                current_device = self._devices[device_index]
+                if current_device.get("device") == new_name:
+                    return self.async_create_entry(title="", data={})
+
+                updated_devices = list(self._devices)
+                updated_device = dict(updated_devices[device_index])
+                updated_device["device"] = new_name
+                updated_devices[device_index] = updated_device
+
+                new_data = {**self.config_entry.data, "devices": updated_devices}
+                self.hass.config_entries.async_update_entry(
+                    self.config_entry,
+                    data=new_data,
+                )
+                self._devices = updated_devices
+                return self.async_create_entry(title="", data={})
+
+        default_index = 0
+        default_name = (
+            self._devices[default_index].get("device", f"Device {default_index + 1}")
+            if self._devices
+            else ""
+        )
+
+        return self.async_show_form(
+            step_id="rename_device",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("device", default=default_index): vol.In(device_options),
+                    vol.Required("name", default=default_name): cv.string,
+                }
+            ),
+            errors=errors,
+        )
+
+    async def async_step_remove_device(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Remove a device from a multi-device configuration."""
+        if not self._devices:
+            return self.async_abort(reason="unknown")
+
+        errors: dict[str, str] = {}
+
+        if len(self._devices) <= 1:
+            errors["base"] = "cannot_remove_last_device"
+
+        device_options = {
+            idx: f"{device.get('device', f'Device {idx + 1}')} ({device.get('host')}:{device.get('port')})"
+            for idx, device in enumerate(self._devices)
+        }
+
+        if user_input is not None:
+            if errors:
+                return self.async_show_form(
+                    step_id="remove_device",
+                    data_schema=vol.Schema(
+                        {
+                            vol.Required("device"): vol.In(device_options),
+                        }
+                    ),
+                    errors=errors,
+                )
+
+            device_index = user_input["device"]
+            if device_index >= len(self._devices):
+                errors["base"] = "device_not_found"
+            else:
+                updated_devices = [
+                    device
+                    for idx, device in enumerate(self._devices)
+                    if idx != device_index
+                ]
+                if not updated_devices:
+                    errors["base"] = "cannot_remove_last_device"
+                else:
+                    new_data = {**self.config_entry.data, "devices": updated_devices}
+                    self.hass.config_entries.async_update_entry(
+                        self.config_entry,
+                        data=new_data,
+                    )
+                    self._devices = updated_devices
+                    return self.async_create_entry(title="", data={})
+
+        return self.async_show_form(
+            step_id="remove_device",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("device"): vol.In(device_options),
+                }
+            ),
+            errors=errors,
+        )
+
+    async def async_step_add_device(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Discover and add a new device to the configuration."""
+        if not self._devices:
+            return self.async_abort(reason="unknown")
+
+        errors: dict[str, str] = {}
+
+        if user_input is None:
+            await self._async_discover_devices()
+
+        existing_macs = {
+            device.get("ble_mac") or device.get("wifi_mac")
+            for device in self._devices
+            if device.get("ble_mac") or device.get("wifi_mac")
+        }
+        discovered_options: dict[str, str] = {}
+
+        for device in self._discovered_devices:
+            mac = device.get("ble_mac") or device.get("wifi_mac") or device.get("mac")
+            if mac and mac in existing_macs:
+                continue
+            discovered_options[device["mac"]] = f"{device['name']} ({device['ip']})"
+
+        discovered_options["manual"] = "Manual IP entry"
+
+        if user_input is not None:
+            selection = user_input["device"]
+
+            if selection == "manual":
+                return await self.async_step_add_device_manual()
+
+            device = next(
+                (item for item in self._discovered_devices if item["mac"] == selection),
+                None,
+            )
+            if not device:
+                errors["base"] = "device_not_found"
+            else:
+                if (
+                    device.get("ble_mac") in existing_macs
+                    or device.get("wifi_mac") in existing_macs
+                ):
+                    errors["base"] = "device_already_configured"
+                else:
+                    updated_devices = list(self._devices)
+                    updated_devices.append(
+                        {
+                            CONF_HOST: device["ip"],
+                            CONF_PORT: DEFAULT_PORT,
+                            "wifi_mac": device.get("wifi_mac"),
+                            "ble_mac": device.get("ble_mac"),
+                            "device": device["name"],
+                            "firmware": device["firmware"],
+                        }
+                    )
+                    new_data = {**self.config_entry.data, "devices": updated_devices}
+                    self.hass.config_entries.async_update_entry(
+                        self.config_entry,
+                        data=new_data,
+                    )
+                    self._devices = updated_devices
+                    return self.async_create_entry(title="", data={})
+
+        return self.async_show_form(
+            step_id="add_device",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("device"): vol.In(discovered_options),
+                }
+            ),
+            errors=errors,
+        )
+
+    async def async_step_add_device_manual(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Add a device via manual IP entry."""
+        if not self._devices:
+            return self.async_abort(reason="unknown")
+
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            try:
+                info = await validate_input(
+                    self.hass,
+                    user_input,
+                )
+
+                mac = info.get("ble_mac") or info.get("wifi_mac")
+                if any(
+                    mac
+                    and mac
+                    == (device.get("ble_mac") or device.get("wifi_mac"))
+                    for device in self._devices
+                ):
+                    errors["base"] = "device_already_configured"
+                else:
+                    updated_devices = list(self._devices)
+                    updated_devices.append(
+                        {
+                            CONF_HOST: user_input[CONF_HOST],
+                            CONF_PORT: user_input.get(CONF_PORT, DEFAULT_PORT),
+                            "wifi_mac": info.get("wifi_mac"),
+                            "ble_mac": info.get("ble_mac"),
+                            "device": info.get("device"),
+                            "firmware": info.get("firmware"),
+                        }
+                    )
+                    new_data = {**self.config_entry.data, "devices": updated_devices}
+                    self.hass.config_entries.async_update_entry(
+                        self.config_entry,
+                        data=new_data,
+                    )
+                    self._devices = updated_devices
+                    return self.async_create_entry(title="", data={})
+
+            except CannotConnect:
+                errors["base"] = "cannot_connect"
+            except Exception:  # pylint: disable=broad-except
+                _LOGGER.exception("Unexpected exception during manual device addition")
+                errors["base"] = "unknown"
+
+        return self.async_show_form(
+            step_id="add_device_manual",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_HOST): cv.string,
+                    vol.Optional(
+                        CONF_PORT, default=DEFAULT_PORT
+                    ): vol.All(vol.Coerce(int), vol.Range(min=1, max=65535)),
+                }
+            ),
+            errors=errors,
+        )
+
+    async def _async_discover_devices(self) -> None:
+        """Discover devices using the same strategy as the config flow."""
+        paused_clients: list[MarstekUDPClient] = []
+        self._discovered_devices = []
+
+        if DOMAIN in self.hass.data:
+            for _entry_id, entry_data in self.hass.data[DOMAIN].items():
+                coordinator = entry_data.get(DATA_COORDINATOR)
+                if not coordinator:
+                    continue
+
+                if hasattr(coordinator, "device_coordinators"):
+                    for device_coordinator in coordinator.device_coordinators.values():
+                        if device_coordinator.api:
+                            await device_coordinator.api.disconnect()
+                            paused_clients.append(device_coordinator.api)
+                elif hasattr(coordinator, "api") and coordinator.api:
+                    await coordinator.api.disconnect()
+                    paused_clients.append(coordinator.api)
+
+        await asyncio.sleep(1)
+
+        api = MarstekUDPClient(self.hass, port=DEFAULT_PORT, remote_port=DEFAULT_PORT)
+        try:
+            await api.connect()
+            self._discovered_devices = await api.discover_devices()
+        except Exception as err:  # pylint: disable=broad-except
+            _LOGGER.error("Discovery failed during options flow: %s", err, exc_info=True)
+        finally:
+            try:
+                await api.disconnect()
+            except Exception:  # pylint: disable=broad-except
+                pass
+
+        await asyncio.sleep(1)
+
+        for client in paused_clients:
+            try:
+                await client.connect()
+            except Exception as err:  # pylint: disable=broad-except
+                _LOGGER.warning("Failed to resume client during options flow: %s", err)
 
 
 class CannotConnect(HomeAssistantError):
