@@ -8,10 +8,10 @@
       "macaddress": "60CF84*"
     }
   ],
-  "documentation": "https://github.com/jaapp/ha-marstek",
+  "documentation": "https://github.com/jaapp/ha-marstek-local-api",
   "integration_type": "device",
   "iot_class": "local_polling",
-  "issue_tracker": "https://github.com/jaapp/ha-marstek/issues",
+  "issue_tracker": "https://github.com/jaapp/ha-marstek-local-api/issues",
   "requirements": [],
   "version": "1.0.0"
 }
