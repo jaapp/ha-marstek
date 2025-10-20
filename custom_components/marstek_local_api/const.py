@@ -90,3 +90,6 @@ DATA_DEVICE_INFO: Final = "device_info"
 
 # Platforms
 PLATFORMS: Final = ["sensor", "binary_sensor", "select"]
+
+# Services
+SERVICE_REQUEST_SYNC: Final = "request_data_sync"

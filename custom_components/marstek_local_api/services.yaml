@@ -1,0 +1,8 @@
+request_data_sync:
+  name: Request Data Sync
+  description: Trigger an immediate data refresh from every configured Marstek device.
+  fields:
+    entry_id:
+      name: Config Entry ID
+      description: Optional config entry ID to refresh. When omitted, all entries are refreshed.
+      example: "1234567890abcdef1234567890abcdef"

@@ -8,8 +8,14 @@ from homeassistant.const import CONF_HOST, Platform
 from homeassistant.core import HomeAssistant
 
 from .api import MarstekUDPClient
-from .const import CONF_PORT, DATA_COORDINATOR, DEFAULT_SCAN_INTERVAL, DOMAIN
+from .const import (
+    CONF_PORT,
+    DATA_COORDINATOR,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+)
 from .coordinator import MarstekDataUpdateCoordinator, MarstekMultiDeviceCoordinator
+from .services import async_setup_services, async_unload_services
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -80,6 +86,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         DATA_COORDINATOR: coordinator,
     }
 
+    if len(hass.data[DOMAIN]) == 1:
+        await async_setup_services(hass)
+
     # Register options update listener
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
@@ -113,5 +122,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         # Remove entry from domain data
         hass.data[DOMAIN].pop(entry.entry_id)
+
+        if not hass.data[DOMAIN]:
+            await async_unload_services(hass)
 
     return unload_ok
