@@ -663,7 +663,7 @@ class MarstekAggregateSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{system_unique_id}_{entity_description.key}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, f"system_{system_unique_id}")},
-            name=f"Marstek System ({device_count} batteries)",
+            name="Marstek System",
             manufacturer="Marstek",
             model="System",
         )
