@@ -2,8 +2,6 @@
 
 Home Assistant integration that talks directly to Marstek Venus C/D/E batteries over the official Local API. It delivers local-only telemetry, mode control, and fleet-wide aggregation without relying on the Marstek cloud.
 
-[![Open this repository in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=jaapp&repository=ha-marstek-local-api&category=integration)
-
 ---
 
 ## 1. Enable the Local API
@@ -19,6 +17,11 @@ Home Assistant integration that talks directly to Marstek Venus C/D/E batteries 
 ## 2. Install the Integration
 
 ### Via HACS
+1. Click this button:
+
+[![Open this repository in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=jaapp&repository=ha-marstek-local-api&category=integration)
+
+Or:
 1. Open **HACS → Integrations → Custom repositories**.
 2. Add `https://github.com/jaapp/ha-marstek-local-api` as an *Integration*.
 3. Install **Marstek Local API** and restart Home Assistant.
