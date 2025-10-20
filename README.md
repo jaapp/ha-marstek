@@ -10,7 +10,7 @@ Home Assistant integration that talks directly to Marstek Venus C/D/E batteries 
 2. Use the [Marstek Venus Monitor](https://rweijnen.github.io/marstek-venus-monitor/latest/) tool to enable *Local API / Open API* on each device.
 3. Note the UDP port (default `30000`) and confirm the devices respond on your LAN.
 
-> _Screenshot placeholder: add local API enablement screenshot here._
+<img width="230" height="129" alt="afbeelding" src="https://github.com/user-attachments/assets/035de357-fbe6-4224-8249-03abb3078fa1" />
 
 ---
 
@@ -39,7 +39,8 @@ After setup you can return to **Settings → Devices & Services → Marstek Loca
 
 > **Important:** If you want all batteries to live under the same config entry (and keep the virtual **Marstek System** device), use the integration’s **Configure** button to add/remove batteries. The default Home Assistant “Add Device” button creates a brand-new config entry and a separate virtual system device.
 
-> _Screenshot placeholder: add integration setup screenshot here._
+
+<img width="442" height="442" alt="afbeelding" src="https://github.com/user-attachments/assets/45001642-412e-4c85-aace-b495639959ff" />
 
 ---
 
@@ -50,7 +51,7 @@ After setup you can return to **Settings → Devices & Services → Marstek Loca
   - The “system” device aggregates fleet metrics (total capacity, total grid import/export, combined state, etc.).  
   - Every physical battery still appears as its own device with per-pack entities.
 
-> _Screenshot placeholder: add entity overview screenshot here._
+<img width="1037" height="488" alt="afbeelding" src="https://github.com/user-attachments/assets/40bcb48a-02e6-4c85-85a4-73751265c6f8" />
 
 ---
 
@@ -99,7 +100,7 @@ You can call the service from **Developer Tools → Services** when you need an 
 
 ## 7. Tips & Troubleshooting
 
-- Keep the standard polling interval (60 s) unless you have explicit reasons to slow it down. Faster intervals do not improve the battery telemetry cadence.
+- Keep the standard polling interval (60 s) unless you have explicit reasons to slow it down. Faster intervals than 60s can lead to the battery becoming unresponsive.
 - If discovery fails, double-check that the Local API remains enabled after firmware upgrades and that UDP port `30000` is accessible from Home Assistant.
 - For verbose logging, append the following to `configuration.yaml`:
   ```yaml
@@ -107,8 +108,6 @@ You can call the service from **Developer Tools → Services** when you need an 
     logs:
       custom_components.marstek_local_api: debug
   ```
-
-> _Screenshot placeholder: add troubleshooting/logging screenshot here._
 
 ---
 
