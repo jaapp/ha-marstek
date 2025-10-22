@@ -1,0 +1,28 @@
+name: Bug report
+about: Report a bug or unexpected behaviour — please include diagnostics and logs (required)
+title: "[BUG] "
+labels:
+  - bug
+body:
+  - type: checkboxes
+    id: confirm_diagnostics
+    attributes:
+      label: Diagnostics confirmation
+      description: Please confirm you have attached the integration diagnostics export and any relevant Home Assistant logs. (required)
+      options:
+        - label: I have attached diagnostics and relevant logs
+          value: diagnostics_attached
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics (attach or paste)
+      description: Attach the diagnostics ZIP, paste diagnostics JSON, or provide a link to the uploaded file. Diagnostics are required.
+      placeholder: Attach the diagnostics ZIP or paste a link/text here
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Issue description
+      description: Briefly describe the problem (what happened, when, and any immediate symptoms).
+      placeholder: e.g. Battery SOC stuck at 0% after firmware update

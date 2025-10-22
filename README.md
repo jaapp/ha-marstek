@@ -131,6 +131,8 @@ Example warnings:
 2025-10-21 10:02:28.693 ERROR (MainThread) [custom_components.marstek_local_api.api] Command EM.GetStatus failed after 3 attempt(s); returning no result
 ```
 
+Quick note for issue reports (EN): always attach the integration diagnostics export and relevant HA logs when filing a bug — it is required for effective troubleshooting.
+
 
 ### Standalone connectivity test
 
