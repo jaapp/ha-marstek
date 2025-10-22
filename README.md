@@ -125,7 +125,7 @@ Known issues (brief):
 - Polling faster than 60s is not advised; devices have been reported to become unstable (e.g. losing CT003 connection).
  - Energy counters / capacity fields may be reported in Wh instead of kWh on certain firmware (values appear 1000× off).
  - `ES.GetStatus` can be unresponsive on some Venus E v3 firmwares (reported on v137 / v139).
- - CT connection state may be reported as "disconnected" / current values might not be updated even when a CT is connected.
+ - CT connection state may be reported as "disconnected" / power values might not be updated even when a CT is connected.
 
 Most of these issues are resolved by updating the device to the latest firmware — Marstek staggers rollouts, so many systems still run older versions. The Local API is evolving quickly and should stabilise as updates are deployed.
 
