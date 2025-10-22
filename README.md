@@ -62,32 +62,32 @@ After setup you can return to **Settings → Devices & Services → Marstek Loca
 
 ## 5. Entities
 
-| Category | Sensor (entity suffix) | Unit | Notes |
-| --- | --- | --- | --- |
-| **Battery** | `battery_soc` | % | State of charge |
-|  | `battery_temperature` | °C | Pack temperature |
-|  | `battery_capacity` | kWh | Remaining capacity |
-|  | `battery_rated_capacity` | kWh | Rated pack capacity |
-|  | `battery_available_capacity` | kWh | Estimated energy still available before full charge |
-|  | `battery_voltage` | V | Pack voltage |
-|  | `battery_current` | A | Pack current (positive = charge) |
-| **Energy system (ES)** | `battery_power` | W | Pack power (positive = charge) |
-|  | `battery_power_in` / `battery_power_out` | W | Split charge/discharge power |
-|  | `battery_state` | text | `charging` / `discharging` / `idle` |
-|  | `grid_power` | W | Grid import/export (positive = import) |
-|  | `offgrid_power` | W | Off-grid load |
-|  | `pv_power_es` | W | Solar production reported via ES |
-|  | `total_pv_energy` | kWh | Lifetime PV energy |
-|  | `total_grid_import` / `total_grid_export` | kWh | Lifetime grid counters |
-|  | `total_load_energy` | kWh | Lifetime load energy |
-| **Energy meter / CT** | `ct_phase_a_power`, `ct_phase_b_power`, `ct_phase_c_power` | W | Per-phase measurements (if CTs installed) |
-|  | `ct_total_power` | W | CT aggregate |
-| **Mode** | `operating_mode` | text | Auto / AI / Manual / Passive |
-| **PV (Venus D only)** | `pv_power`, `pv_voltage`, `pv_current` | W / V / A | MPPT telemetry |
-| **Network** | `wifi_rssi` | dBm | Wi-Fi signal |
-|  | `wifi_ssid`, `wifi_ip`, `wifi_gateway`, `wifi_subnet`, `wifi_dns` | text | Wi-Fi configuration |
-| **Device info** | `device_model`, `firmware_version`, `ble_mac`, `wifi_mac`, `device_ip` | text | Identification fields |
-| **Diagnostics** | `last_message_received` | seconds | Time since the last successful poll |
+| Category | Sensor (entity suffix) | Unit | Notes | Polling multiplier | Default interval (s) |
+| --- | --- | --- | --- | ---: | ---: |
+| **Battery** | `battery_soc` | % | State of charge | 1x | 60 |
+|  | `battery_temperature` | °C | Pack temperature | 1x | 60 |
+|  | `battery_capacity` | kWh | Remaining capacity | 1x | 60 |
+|  | `battery_rated_capacity` | kWh | Rated pack capacity | 1x | 60 |
+|  | `battery_available_capacity` | kWh | Estimated energy still available before full charge | 1x | 60 |
+|  | `battery_voltage` | V | Pack voltage | 1x | 60 |
+|  | `battery_current` | A | Pack current (positive = charge) | 1x | 60 |
+| **Energy system (ES)** | `battery_power` | W | Pack power (positive = charge) | 1x | 60 |
+|  | `battery_power_in` / `battery_power_out` | W | Split charge/discharge power | 1x | 60 |
+|  | `battery_state` | text | `charging` / `discharging` / `idle` | 1x | 60 |
+|  | `grid_power` | W | Grid import/export (positive = import) | 1x | 60 |
+|  | `offgrid_power` | W | Off-grid load | 1x | 60 |
+|  | `pv_power_es` | W | Solar production reported via ES | 1x | 60 |
+|  | `total_pv_energy` | kWh | Lifetime PV energy | 1x | 60 |
+|  | `total_grid_import` / `total_grid_export` | kWh | Lifetime grid counters | 1x | 60 |
+|  | `total_load_energy` | kWh | Lifetime load energy | 1x | 60 |
+| **Energy meter / CT** | `ct_phase_a_power`, `ct_phase_b_power`, `ct_phase_c_power` | W | Per-phase measurements (if CTs installed) | 5x | 300 |
+|  | `ct_total_power` | W | CT aggregate | 5x | 300 |
+| **Mode** | `operating_mode` | text | Auto / AI / Manual / Passive | 5x | 300 |
+| **PV (Venus D only)** | `pv_power`, `pv_voltage`, `pv_current` | W / V / A | MPPT telemetry | 5x | 300 |
+| **Network** | `wifi_rssi` | dBm | Wi-Fi signal | 10x | 600 |
+|  | `wifi_ssid`, `wifi_ip`, `wifi_gateway`, `wifi_subnet`, `wifi_dns` | text | Wi-Fi configuration | 10x | 600 |
+| **Device info** | `device_model`, `firmware_version`, `ble_mac`, `wifi_mac`, `device_ip` | text | Identification fields | 10x | 600 |
+| **Diagnostics** | `last_message_received` | seconds | Time since the last successful poll | 1x | 60 |
 
 Every sensor listed above also exists in an aggregated form under the **Marstek System** device whenever you manage multiple batteries together (prefixed with `system_`).
 
@@ -113,6 +113,24 @@ You can call the service from **Developer Tools → Services** when you need an 
     logs:
       custom_components.marstek_local_api: debug
   ```
+
+## API maturity & known issues
+
+Note: the Marstek Local API is still relatively new and evolving. Behavior can vary between hardware revisions (v2/v3) and firmware versions (EMS and BMS). When reporting issues, always include diagnostic data (logs and the integration's diagnostic fields).
+
+Known issues (brief):
+- Battery temperature may read 10× too high on older BMS versions.
+- API call timeouts (shown as warnings in the log).
+- Some API calls are not supported on older firmware — please ensure devices are updated before filing issues.
+- Polling faster than 60s is not advised; devices have been reported to become unstable (e.g. losing CT003 connection).
+
+Example warnings:
+
+```
+2025-10-21 10:01:34.986 WARNING (MainThread) [custom_components.marstek_local_api.api] Command ES.GetStatus timed out after 15s (attempt 1/3, host=192.168.0.47)
+2025-10-21 10:02:28.693 ERROR (MainThread) [custom_components.marstek_local_api.api] Command EM.GetStatus failed after 3 attempt(s); returning no result
+```
+
 
 ### Standalone connectivity test
 
