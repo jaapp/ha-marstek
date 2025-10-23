@@ -14,6 +14,8 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .api import MarstekAPIError, MarstekUDPClient
 from .compatibility import CompatibilityMatrix
 from .const import (
+    COMMAND_MAX_ATTEMPTS,
+    COMMAND_TIMEOUT,
     DEFAULT_SCAN_INTERVAL,
     DEVICE_MODEL_VENUS_D,
     UPDATE_INTERVAL_FAST,
@@ -46,6 +48,8 @@ class MarstekMultiDeviceCoordinator(DataUpdateCoordinator):
             name="Marstek System",
             update_interval=timedelta(seconds=scan_interval),
         )
+        # Allow enough time for a full round of command retries during each refresh.
+        self._timeout = COMMAND_TIMEOUT * COMMAND_MAX_ATTEMPTS + 5
 
     async def async_setup(self) -> None:
         """Set up individual device coordinators."""
@@ -273,6 +277,8 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
             name=f"Marstek {device_name}",
             update_interval=timedelta(seconds=scan_interval),
         )
+        # Default coordinator timeout (10s) is too short for staged polling + retries.
+        self._timeout = COMMAND_TIMEOUT * COMMAND_MAX_ATTEMPTS + 5
 
     def _update_device_version(self, device_info: dict) -> None:
         """Update device firmware/hardware version and reinitialize compatibility matrix if changed.
