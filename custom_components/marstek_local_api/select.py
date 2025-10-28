@@ -7,6 +7,7 @@ import logging
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -104,36 +105,59 @@ class MarstekOperatingModeSelect(CoordinatorEntity, SelectEntity):
         # Build config based on mode
         config = self._build_mode_config(option)
 
-        # Retry logic as per design document
-        for attempt in range(MAX_RETRIES):
-            try:
-                success = await self.coordinator.api.set_es_mode(config)
+        success = False
+        last_error: str | None = None
 
-                if success:
-                    _LOGGER.info("Successfully set operating mode to %s", option)
-                    # Request immediate refresh
-                    await self.coordinator.async_request_refresh()
-                    return
+        try:
+            # Retry logic as per design document
+            for attempt in range(1, MAX_RETRIES + 1):
+                try:
+                    if await self.coordinator.api.set_es_mode(config):
+                        _LOGGER.info("Successfully set operating mode to %s", option)
+                        success = True
+                        break
 
-                _LOGGER.warning(
-                    "Device rejected mode change (attempt %d/%d)",
-                    attempt + 1,
-                    MAX_RETRIES,
-                )
+                    last_error = "device rejected mode change"
+                    _LOGGER.warning(
+                        "Device rejected mode change (attempt %d/%d)",
+                        attempt,
+                        MAX_RETRIES,
+                    )
 
-            except Exception as err:
-                _LOGGER.error(
-                    "Error setting mode (attempt %d/%d): %s",
-                    attempt + 1,
-                    MAX_RETRIES,
-                    err,
-                )
+                except Exception as err:
+                    last_error = str(err)
+                    _LOGGER.error(
+                        "Error setting mode (attempt %d/%d): %s",
+                        attempt,
+                        MAX_RETRIES,
+                        err,
+                    )
 
-            # Wait before retry (except on last attempt)
-            if attempt < MAX_RETRIES - 1:
-                await asyncio.sleep(RETRY_DELAY)
+                # Wait before retry (except on last attempt)
+                if attempt < MAX_RETRIES:
+                    await asyncio.sleep(RETRY_DELAY)
+        finally:
+            await self._refresh_mode_data()
 
-        _LOGGER.error("Failed to set operating mode after %d attempts", MAX_RETRIES)
+        if success:
+            return
+
+        _LOGGER.error(
+            "Failed to set operating mode to %s after %d attempts",
+            option,
+            MAX_RETRIES,
+        )
+        message = f"Failed to set operating mode to {option}"
+        if last_error:
+            message = f"{message}: {last_error}"
+        raise HomeAssistantError(message)
+
+    async def _refresh_mode_data(self) -> None:
+        """Force a coordinator refresh so entities reflect the latest state."""
+        try:
+            await self.coordinator.async_refresh()
+        except Exception as err:
+            _LOGGER.warning("Failed to refresh data after mode change: %s", err)
 
     def _build_mode_config(self, mode: str) -> dict:
         """Build configuration for the selected mode."""
@@ -229,38 +253,81 @@ class MarstekMultiDeviceOperatingModeSelect(CoordinatorEntity, SelectEntity):
         # Build config based on mode
         config = self._build_mode_config(option)
 
-        # Retry logic as per design document
-        for attempt in range(MAX_RETRIES):
-            try:
-                success = await self.device_coordinator.api.set_es_mode(config)
+        success = False
+        last_error: str | None = None
 
-                if success:
-                    _LOGGER.info("Successfully set operating mode to %s for device %s", option, self.device_mac)
-                    # Request immediate refresh
-                    await self.coordinator.async_request_refresh()
-                    return
+        try:
+            # Retry logic as per design document
+            for attempt in range(1, MAX_RETRIES + 1):
+                try:
+                    if await self.device_coordinator.api.set_es_mode(config):
+                        _LOGGER.info(
+                            "Successfully set operating mode to %s for device %s",
+                            option,
+                            self.device_mac,
+                        )
+                        success = True
+                        break
 
-                _LOGGER.warning(
-                    "Device %s rejected mode change (attempt %d/%d)",
-                    self.device_mac,
-                    attempt + 1,
-                    MAX_RETRIES,
-                )
+                    last_error = "device rejected mode change"
+                    _LOGGER.warning(
+                        "Device %s rejected mode change (attempt %d/%d)",
+                        self.device_mac,
+                        attempt,
+                        MAX_RETRIES,
+                    )
 
-            except Exception as err:
-                _LOGGER.error(
-                    "Error setting mode for device %s (attempt %d/%d): %s",
-                    self.device_mac,
-                    attempt + 1,
-                    MAX_RETRIES,
-                    err,
-                )
+                except Exception as err:
+                    last_error = str(err)
+                    _LOGGER.error(
+                        "Error setting mode for device %s (attempt %d/%d): %s",
+                        self.device_mac,
+                        attempt,
+                        MAX_RETRIES,
+                        err,
+                    )
 
-            # Wait before retry (except on last attempt)
-            if attempt < MAX_RETRIES - 1:
-                await asyncio.sleep(RETRY_DELAY)
+                # Wait before retry (except on last attempt)
+                if attempt < MAX_RETRIES:
+                    await asyncio.sleep(RETRY_DELAY)
+        finally:
+            await self._refresh_mode_data()
 
-        _LOGGER.error("Failed to set operating mode for device %s after %d attempts", self.device_mac, MAX_RETRIES)
+        if success:
+            return
+
+        _LOGGER.error(
+            "Failed to set operating mode to %s for device %s after %d attempts",
+            option,
+            self.device_mac,
+            MAX_RETRIES,
+        )
+        message = (
+            f"Failed to set operating mode to {option} for device {self.device_mac}"
+        )
+        if last_error:
+            message = f"{message}: {last_error}"
+        raise HomeAssistantError(message)
+
+    async def _refresh_mode_data(self) -> None:
+        """Force a refresh on the device and aggregate coordinators."""
+        try:
+            await self.device_coordinator.async_refresh()
+        except Exception as err:
+            _LOGGER.warning(
+                "Failed to refresh device %s data after mode change: %s",
+                self.device_mac,
+                err,
+            )
+
+        try:
+            await self.coordinator.async_refresh()
+        except Exception as err:
+            _LOGGER.warning(
+                "Failed to refresh aggregate data after mode change for %s: %s",
+                self.device_mac,
+                err,
+            )
 
     def _build_mode_config(self, mode: str) -> dict:
         """Build configuration for the selected mode."""
