@@ -265,6 +265,11 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
         self.poll_jitter = random.uniform(0.2, jitter_cap)
         self._last_update_start: float | None = None
 
+        # Staleness tracking - track last successful update per category
+        self.category_last_updated: dict[str, float] = {}
+        self.STALENESS_THRESHOLD = 3  # missed updates before invalidation
+        self.STATIC_CATEGORIES = {"device", "wifi", "ble", "_diagnostic", "aggregates"}
+
         # Initialize compatibility matrix for version-specific scaling
         self.compatibility = CompatibilityMatrix(
             device_model=device_model,
@@ -321,6 +326,32 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
             return None
         return int(time.time() - self.last_message_timestamp)
 
+    def is_category_fresh(self, category: str) -> bool:
+        """Check if category data is fresh enough to display.
+
+        Args:
+            category: The data category to check (battery, es, em, pv, mode, etc.)
+
+        Returns:
+            True if data is fresh, False if stale or never received
+        """
+        # Static categories never go stale
+        if category in self.STATIC_CATEGORIES:
+            return True
+
+        # Check if we ever received data for this category
+        if category not in self.category_last_updated:
+            return False
+
+        # Calculate time since last update
+        last_update = self.category_last_updated[category]
+        elapsed = time.time() - last_update
+
+        # Calculate max age (update interval * threshold)
+        max_age = self.update_interval.total_seconds() * self.STALENESS_THRESHOLD
+
+        return elapsed < max_age
+
     def _build_command_diagnostics(self, prefix: str, stats: dict[str, Any] | None) -> dict[str, Any]:
         """Transform command stats into diagnostic fields."""
         if not stats:
@@ -368,6 +399,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                     device_info = await self.api.get_device_info()
                     if device_info:
                         data["device"] = device_info
+                        self.category_last_updated["device"] = time.time()
                         self._update_device_version(device_info)
                 except Exception as err:
                     _LOGGER.warning("Failed to get device info on first update: %s", err)
@@ -401,6 +433,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                     )
 
                 data["es"] = es_status
+                self.category_last_updated["es"] = time.time()
 
             try:
                 await asyncio.sleep(1.0)  # Delay between API calls
@@ -428,6 +461,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                         battery_status["bat_current"], "bat_current"
                     )
                 data["battery"] = battery_status
+                self.category_last_updated["battery"] = time.time()
 
             # Medium priority - every 5th update (~300s)
             # EM, PV, Mode - slower-changing data
@@ -438,6 +472,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                     em_status = await self.api.get_em_status()
                     if em_status:
                         data["em"] = em_status
+                        self.category_last_updated["em"] = time.time()
                 except Exception as err:
                     _LOGGER.debug("Failed to get EM status: %s", err)
 
@@ -448,6 +483,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                         pv_status = await self.api.get_pv_status()
                         if pv_status:
                             data["pv"] = pv_status
+                            self.category_last_updated["pv"] = time.time()
                     except Exception as err:
                         _LOGGER.debug("Failed to get PV status: %s", err)
 
@@ -456,6 +492,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                     mode_status = await self.api.get_es_mode()
                     if mode_status:
                         data["mode"] = mode_status
+                        self.category_last_updated["mode"] = time.time()
                 except Exception as err:
                     _LOGGER.debug("Failed to get mode status: %s", err)
 
@@ -467,6 +504,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                     device_info = await self.api.get_device_info()
                     if device_info:
                         data["device"] = device_info
+                        self.category_last_updated["device"] = time.time()
                         self._update_device_version(device_info)
                 except Exception as err:
                     _LOGGER.debug("Failed to get device info: %s", err)
@@ -476,6 +514,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                     wifi_status = await self.api.get_wifi_status()
                     if wifi_status:
                         data["wifi"] = wifi_status
+                        self.category_last_updated["wifi"] = time.time()
                 except Exception as err:
                     _LOGGER.debug("Failed to get wifi status: %s", err)
 
@@ -484,6 +523,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                     ble_status = await self.api.get_ble_status()
                     if ble_status:
                         data["ble"] = ble_status
+                        self.category_last_updated["ble"] = time.time()
                 except Exception as err:
                     _LOGGER.debug("Failed to get BLE status: %s", err)
 
