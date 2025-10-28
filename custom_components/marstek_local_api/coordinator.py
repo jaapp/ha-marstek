@@ -8,6 +8,7 @@ import random
 import time
 from typing import Any
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
@@ -36,11 +37,13 @@ class MarstekMultiDeviceCoordinator(DataUpdateCoordinator):
         hass: HomeAssistant,
         devices: list[dict[str, Any]],
         scan_interval: int = DEFAULT_SCAN_INTERVAL,
+        config_entry: ConfigEntry | None = None,
     ) -> None:
         """Initialize the multi-device coordinator."""
         self.devices = devices
         self.device_coordinators: dict[str, MarstekDataUpdateCoordinator] = {}
         self.update_count = 1
+        self._config_entry = config_entry
 
         super().__init__(
             hass,
@@ -78,6 +81,8 @@ class MarstekMultiDeviceCoordinator(DataUpdateCoordinator):
                 firmware_version=device_data.get("firmware", 0),
                 device_model=device_data.get("device", ""),
                 scan_interval=self.update_interval.total_seconds(),
+                config_entry=self._config_entry,
+                device_mac=mac,
             )
 
             self.device_coordinators[mac] = coordinator
@@ -254,6 +259,8 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
         firmware_version: int,
         device_model: str,
         scan_interval: int = DEFAULT_SCAN_INTERVAL,
+        config_entry: ConfigEntry | None = None,
+        device_mac: str | None = None,
     ) -> None:
         """Initialize the coordinator."""
         self.api = api
@@ -264,6 +271,8 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
         jitter_cap = min(2.5, max(0.5, scan_interval * 0.1))
         self.poll_jitter = random.uniform(0.2, jitter_cap)
         self._last_update_start: float | None = None
+        self._config_entry = config_entry
+        self._device_mac = device_mac  # Used for multi-device mode to identify which device to update
 
         # Staleness tracking - track last successful update per category
         self.category_last_updated: dict[str, float] = {}
@@ -319,6 +328,43 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                 device_model=self.device_model,
                 firmware_version=self.firmware_version,
             )
+
+            # Update config entry data so DeviceInfo shows current firmware/model
+            if self._config_entry:
+                new_data = dict(self._config_entry.data)
+
+                # Handle both single-device and multi-device config entries
+                if "devices" in new_data and self._device_mac:
+                    # Multi-device mode: update the specific device in the devices list
+                    devices = list(new_data["devices"])
+                    for i, device in enumerate(devices):
+                        device_mac = device.get("ble_mac") or device.get("wifi_mac")
+                        if device_mac == self._device_mac:
+                            device_copy = dict(device)
+                            if firmware_changed:
+                                device_copy["firmware"] = new_firmware
+                            if model_changed:
+                                device_copy["device"] = new_model
+                            devices[i] = device_copy
+                            break
+                    new_data["devices"] = devices
+                else:
+                    # Single-device mode: update top-level fields
+                    if firmware_changed:
+                        new_data["firmware"] = new_firmware
+                    if model_changed:
+                        new_data["device"] = new_model
+
+                self.hass.config_entries.async_update_entry(
+                    self._config_entry,
+                    data=new_data
+                )
+                _LOGGER.info(
+                    "Updated config entry with new firmware=%s, model=%s (device_mac=%s)",
+                    new_firmware if firmware_changed else "unchanged",
+                    new_model if model_changed else "unchanged",
+                    self._device_mac or "single-device",
+                )
 
     def _get_seconds_since_last_message(self) -> int | None:
         """Get seconds since last successful message (Design Doc §556-576)."""

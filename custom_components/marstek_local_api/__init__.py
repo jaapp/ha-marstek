@@ -39,6 +39,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass,
             devices=entry.data["devices"],
             scan_interval=scan_interval,
+            config_entry=entry,
         )
 
         # Set up device coordinators
@@ -76,6 +77,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             firmware_version=entry.data.get("firmware", 0),
             device_model=entry.data.get("device", ""),
             scan_interval=scan_interval,
+            config_entry=entry,
         )
 
         # Fetch initial data
