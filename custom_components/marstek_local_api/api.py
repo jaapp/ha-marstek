@@ -215,7 +215,8 @@ class MarstekUDPClient:
         self,
         method: str,
         params: dict | None = None,
-        timeout: int = COMMAND_TIMEOUT,
+        timeout: int | None = None,
+        max_attempts: int | None = None,
     ) -> dict | None:
         """Send a command and wait for response."""
         if not self._connected:
@@ -223,6 +224,9 @@ class MarstekUDPClient:
 
         if params is None:
             params = {"id": 0}
+
+        effective_timeout = timeout if timeout is not None else COMMAND_TIMEOUT
+        attempt_limit = max_attempts if max_attempts is not None else COMMAND_MAX_ATTEMPTS
 
         # Generate unique integer message ID (required for Venus E firmware V139+)
         self._msg_id_counter = (self._msg_id_counter + 1) % 1000000  # Wrap at 1 million
@@ -275,7 +279,7 @@ class MarstekUDPClient:
         try:
             loop = asyncio.get_running_loop()
 
-            for attempt in range(1, COMMAND_MAX_ATTEMPTS + 1):
+            for attempt in range(1, attempt_limit + 1):
                 response_event.clear()
                 response_data.clear()
                 attempt_started = loop.time()
@@ -284,7 +288,7 @@ class MarstekUDPClient:
                     _LOGGER.debug(
                         "Sending payload (attempt %d/%d) to %s:%s: %s",
                         attempt,
-                        COMMAND_MAX_ATTEMPTS,
+                        attempt_limit,
                         self.host or "broadcast",
                         self.remote_port,
                         payload_str,
@@ -293,7 +297,7 @@ class MarstekUDPClient:
                     await asyncio.sleep(0)
                     await self._send_to_host(payload_str)
 
-                    await asyncio.wait_for(response_event.wait(), timeout=timeout)
+                    await asyncio.wait_for(response_event.wait(), timeout=effective_timeout)
 
                     if "error" in response_data:
                         error = response_data["error"]
@@ -345,9 +349,9 @@ class MarstekUDPClient:
                     _LOGGER.warning(
                         "Command %s timed out after %ss (attempt %d/%d, host=%s)",
                         method,
-                        timeout,
+                        effective_timeout,
                         attempt,
-                        COMMAND_MAX_ATTEMPTS,
+                        attempt_limit,
                         self.host,
                     )
                     last_exception = None
@@ -368,20 +372,20 @@ class MarstekUDPClient:
                         method,
                         self.host,
                         attempt,
-                        COMMAND_MAX_ATTEMPTS,
+                        attempt_limit,
                         err,
                         exc_info=True,
                     )
                     last_exception = err
 
-                if attempt < COMMAND_MAX_ATTEMPTS:
+                if attempt < attempt_limit:
                     delay = self._compute_backoff_delay(attempt)
                     _LOGGER.debug(
                         "Waiting %.2fs before retrying %s (attempt %d/%d)",
                         delay,
                         method,
                         attempt + 1,
-                        COMMAND_MAX_ATTEMPTS,
+                        attempt_limit,
                     )
                     await asyncio.sleep(delay)
 
@@ -394,7 +398,7 @@ class MarstekUDPClient:
         _LOGGER.error(
             "Command %s failed after %d attempt(s); returning no result",
             method,
-            COMMAND_MAX_ATTEMPTS,
+            attempt_limit,
         )
         return None
 
@@ -693,37 +697,110 @@ class MarstekUDPClient:
         return devices
 
     # API method helpers
-    async def get_device_info(self) -> dict | None:
+    async def get_device_info(
+        self,
+        *,
+        timeout: int | None = None,
+        max_attempts: int | None = None,
+    ) -> dict | None:
         """Get device information."""
-        return await self.send_command(METHOD_GET_DEVICE, {"ble_mac": "0"})
+        return await self.send_command(
+            METHOD_GET_DEVICE,
+            {"ble_mac": "0"},
+            timeout=timeout,
+            max_attempts=max_attempts,
+        )
 
-    async def get_wifi_status(self) -> dict | None:
+    async def get_wifi_status(
+        self,
+        *,
+        timeout: int | None = None,
+        max_attempts: int | None = None,
+    ) -> dict | None:
         """Get WiFi status."""
-        return await self.send_command(METHOD_WIFI_STATUS)
+        return await self.send_command(
+            METHOD_WIFI_STATUS,
+            timeout=timeout,
+            max_attempts=max_attempts,
+        )
 
-    async def get_ble_status(self) -> dict | None:
+    async def get_ble_status(
+        self,
+        *,
+        timeout: int | None = None,
+        max_attempts: int | None = None,
+    ) -> dict | None:
         """Get Bluetooth status."""
-        return await self.send_command(METHOD_BLE_STATUS)
+        return await self.send_command(
+            METHOD_BLE_STATUS,
+            timeout=timeout,
+            max_attempts=max_attempts,
+        )
 
-    async def get_battery_status(self) -> dict | None:
+    async def get_battery_status(
+        self,
+        *,
+        timeout: int | None = None,
+        max_attempts: int | None = None,
+    ) -> dict | None:
         """Get battery status."""
-        return await self.send_command(METHOD_BATTERY_STATUS)
+        return await self.send_command(
+            METHOD_BATTERY_STATUS,
+            timeout=timeout,
+            max_attempts=max_attempts,
+        )
 
-    async def get_pv_status(self) -> dict | None:
+    async def get_pv_status(
+        self,
+        *,
+        timeout: int | None = None,
+        max_attempts: int | None = None,
+    ) -> dict | None:
         """Get PV (solar) status."""
-        return await self.send_command(METHOD_PV_STATUS)
+        return await self.send_command(
+            METHOD_PV_STATUS,
+            timeout=timeout,
+            max_attempts=max_attempts,
+        )
 
-    async def get_es_status(self) -> dict | None:
+    async def get_es_status(
+        self,
+        *,
+        timeout: int | None = None,
+        max_attempts: int | None = None,
+    ) -> dict | None:
         """Get energy system status."""
-        return await self.send_command(METHOD_ES_STATUS)
+        return await self.send_command(
+            METHOD_ES_STATUS,
+            timeout=timeout,
+            max_attempts=max_attempts,
+        )
 
-    async def get_es_mode(self) -> dict | None:
+    async def get_es_mode(
+        self,
+        *,
+        timeout: int | None = None,
+        max_attempts: int | None = None,
+    ) -> dict | None:
         """Get energy system operating mode."""
-        return await self.send_command(METHOD_ES_MODE)
+        return await self.send_command(
+            METHOD_ES_MODE,
+            timeout=timeout,
+            max_attempts=max_attempts,
+        )
 
-    async def get_em_status(self) -> dict | None:
+    async def get_em_status(
+        self,
+        *,
+        timeout: int | None = None,
+        max_attempts: int | None = None,
+    ) -> dict | None:
         """Get energy meter (CT) status."""
-        return await self.send_command(METHOD_EM_STATUS)
+        return await self.send_command(
+            METHOD_EM_STATUS,
+            timeout=timeout,
+            max_attempts=max_attempts,
+        )
 
     async def set_es_mode(self, config: dict) -> bool:
         """Set energy system operating mode."""

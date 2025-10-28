@@ -439,11 +439,22 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
             # Start with previous data to preserve values on partial failures
             data = dict(self.data) if self.data else {}
             had_success = False
+
+            def _command_kwargs() -> dict[str, Any]:
+                """Use shorter timeouts/attempts during the very first refresh."""
+                if is_first_update and not had_success:
+                    return {"timeout": min(5, COMMAND_TIMEOUT), "max_attempts": 1}
+                return {}
+
+            def _command_delay() -> float:
+                """Back off a little between calls; go faster while probing initial contact."""
+                return 0.2 if is_first_update and not had_success else 1.0
+
             if is_first_update:
                 _LOGGER.debug("First update - fetching device info")
                 try:
-                    await asyncio.sleep(1.0)  # Delay before first API call
-                    device_info = await self.api.get_device_info()
+                    await asyncio.sleep(_command_delay())  # Delay before first API call
+                    device_info = await self.api.get_device_info(**_command_kwargs())
                     if device_info:
                         data["device"] = device_info
                         self.category_last_updated["device"] = time.time()
@@ -455,8 +466,8 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
             # High priority - every update (~60s)
             # ES.GetStatus and Bat.GetStatus for real-time power/energy data
             try:
-                await asyncio.sleep(1.0)  # Delay between API calls
-                es_status = await self.api.get_es_status()
+                await asyncio.sleep(_command_delay())  # Delay between API calls
+                es_status = await self.api.get_es_status(**_command_kwargs())
             except Exception as err:
                 _LOGGER.debug("Failed to get ES status: %s", err)
                 es_status = None
@@ -485,8 +496,8 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                 had_success = True
 
             try:
-                await asyncio.sleep(1.0)  # Delay between API calls
-                battery_status = await self.api.get_battery_status()
+                await asyncio.sleep(_command_delay())  # Delay between API calls
+                battery_status = await self.api.get_battery_status(**_command_kwargs())
             except Exception as err:
                 _LOGGER.debug("Failed to get battery status: %s", err)
                 battery_status = None
@@ -516,10 +527,12 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
             # Medium priority - every 5th update (~300s)
             # EM, PV, Mode - slower-changing data
             run_medium = self.update_count == 1 or self.update_count % UPDATE_INTERVAL_MEDIUM == 0
+            if is_first_update and not had_success:
+                run_medium = False
             if run_medium:
                 try:
-                    await asyncio.sleep(1.0)  # Delay between API calls
-                    em_status = await self.api.get_em_status()
+                    await asyncio.sleep(_command_delay())  # Delay between API calls
+                    em_status = await self.api.get_em_status(**_command_kwargs())
                     if em_status:
                         data["em"] = em_status
                         self.category_last_updated["em"] = time.time()
@@ -530,8 +543,8 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                 # Only query PV for Venus D
                 if self.device_model == DEVICE_MODEL_VENUS_D:
                     try:
-                        await asyncio.sleep(1.0)  # Delay between API calls
-                        pv_status = await self.api.get_pv_status()
+                        await asyncio.sleep(_command_delay())  # Delay between API calls
+                        pv_status = await self.api.get_pv_status(**_command_kwargs())
                         if pv_status:
                             data["pv"] = pv_status
                             self.category_last_updated["pv"] = time.time()
@@ -540,8 +553,8 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                         _LOGGER.debug("Failed to get PV status: %s", err)
 
                 try:
-                    await asyncio.sleep(1.0)  # Delay between API calls
-                    mode_status = await self.api.get_es_mode()
+                    await asyncio.sleep(_command_delay())  # Delay between API calls
+                    mode_status = await self.api.get_es_mode(**_command_kwargs())
                     if mode_status:
                         data["mode"] = mode_status
                         self.category_last_updated["mode"] = time.time()
@@ -551,10 +564,13 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
 
             # Low priority - every 10th update (~600s)
             # Device, WiFi, BLE - static/diagnostic data
-            if self.update_count % UPDATE_INTERVAL_SLOW == 0:
+            run_slow = self.update_count % UPDATE_INTERVAL_SLOW == 0
+            if is_first_update and not had_success:
+                run_slow = False
+            if run_slow:
                 try:
-                    await asyncio.sleep(1.0)  # Delay between API calls
-                    device_info = await self.api.get_device_info()
+                    await asyncio.sleep(_command_delay())  # Delay between API calls
+                    device_info = await self.api.get_device_info(**_command_kwargs())
                     if device_info:
                         data["device"] = device_info
                         self.category_last_updated["device"] = time.time()
@@ -564,8 +580,8 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                     _LOGGER.debug("Failed to get device info: %s", err)
 
                 try:
-                    await asyncio.sleep(1.0)  # Delay between API calls
-                    wifi_status = await self.api.get_wifi_status()
+                    await asyncio.sleep(_command_delay())  # Delay between API calls
+                    wifi_status = await self.api.get_wifi_status(**_command_kwargs())
                     if wifi_status:
                         data["wifi"] = wifi_status
                         self.category_last_updated["wifi"] = time.time()
@@ -574,8 +590,8 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                     _LOGGER.debug("Failed to get wifi status: %s", err)
 
                 try:
-                    await asyncio.sleep(1.0)  # Delay between API calls
-                    ble_status = await self.api.get_ble_status()
+                    await asyncio.sleep(_command_delay())  # Delay between API calls
+                    ble_status = await self.api.get_ble_status(**_command_kwargs())
                     if ble_status:
                         data["ble"] = ble_status
                         self.category_last_updated["ble"] = time.time()
