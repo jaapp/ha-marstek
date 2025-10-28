@@ -438,6 +438,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
 
             # Start with previous data to preserve values on partial failures
             data = dict(self.data) if self.data else {}
+            had_success = False
             if is_first_update:
                 _LOGGER.debug("First update - fetching device info")
                 try:
@@ -447,6 +448,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                         data["device"] = device_info
                         self.category_last_updated["device"] = time.time()
                         self._update_device_version(device_info)
+                        had_success = True
                 except Exception as err:
                     _LOGGER.warning("Failed to get device info on first update: %s", err)
 
@@ -480,6 +482,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
 
                 data["es"] = es_status
                 self.category_last_updated["es"] = time.time()
+                had_success = True
 
             try:
                 await asyncio.sleep(1.0)  # Delay between API calls
@@ -508,6 +511,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                     )
                 data["battery"] = battery_status
                 self.category_last_updated["battery"] = time.time()
+                had_success = True
 
             # Medium priority - every 5th update (~300s)
             # EM, PV, Mode - slower-changing data
@@ -519,6 +523,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                     if em_status:
                         data["em"] = em_status
                         self.category_last_updated["em"] = time.time()
+                        had_success = True
                 except Exception as err:
                     _LOGGER.debug("Failed to get EM status: %s", err)
 
@@ -530,6 +535,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                         if pv_status:
                             data["pv"] = pv_status
                             self.category_last_updated["pv"] = time.time()
+                            had_success = True
                     except Exception as err:
                         _LOGGER.debug("Failed to get PV status: %s", err)
 
@@ -539,6 +545,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                     if mode_status:
                         data["mode"] = mode_status
                         self.category_last_updated["mode"] = time.time()
+                        had_success = True
                 except Exception as err:
                     _LOGGER.debug("Failed to get mode status: %s", err)
 
@@ -552,6 +559,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                         data["device"] = device_info
                         self.category_last_updated["device"] = time.time()
                         self._update_device_version(device_info)
+                        had_success = True
                 except Exception as err:
                     _LOGGER.debug("Failed to get device info: %s", err)
 
@@ -561,6 +569,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                     if wifi_status:
                         data["wifi"] = wifi_status
                         self.category_last_updated["wifi"] = time.time()
+                        had_success = True
                 except Exception as err:
                     _LOGGER.debug("Failed to get wifi status: %s", err)
 
@@ -570,6 +579,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
                     if ble_status:
                         data["ble"] = ble_status
                         self.category_last_updated["ble"] = time.time()
+                        had_success = True
                 except Exception as err:
                     _LOGGER.debug("Failed to get BLE status: %s", err)
 
@@ -578,17 +588,21 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
 
             # On first update, we need at least some data to proceed
             # But we're lenient - even just device info is enough
-            if is_first_update and not data:
-                _LOGGER.warning("First update failed - no data received, will retry")
-                raise UpdateFailed("No response from device - check network connectivity")
+            if is_first_update and not had_success:
+                _LOGGER.warning(
+                    "First update did not receive any data from device; continuing setup and retrying in background"
+                )
 
             # If we got any new data, update the last message timestamp
             # (We compare with the preserved old data to see if anything changed)
-            if data != self.data:
+            if had_success:
                 self.last_message_timestamp = time.time()
                 _LOGGER.debug("Updated data - at least one API call succeeded (keys: %s)", list(data.keys()))
             else:
-                _LOGGER.debug("No new data this update - all API calls may have timed out, keeping old values (keys: %s)", list(data.keys()))
+                _LOGGER.debug(
+                    "No fresh data this update - all API calls may have timed out, keeping previous values (keys: %s)",
+                    list(data.keys()),
+                )
 
             # Add diagnostic data (will be recalculated on sensor access)
             es_stats = self.api.get_command_stats(METHOD_ES_STATUS)
