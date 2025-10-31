@@ -119,6 +119,7 @@ You can call the service from **Developer Tools → Services** when you need an 
 Note: the Marstek Local API is still relatively new and evolving. Behavior can vary between hardware revisions (v2/v3) and firmware versions (EMS and BMS). When reporting issues, always include diagnostic data (logs and the integration's diagnostic fields).
 
 Known issues (brief):
+- Polling too often might cause connection to be lost to the CT002/3
 - Battery temperature may read 10× too high on older BMS versions.
 - API call timeouts (shown as warnings in the log).
 - Some API calls are not supported on older firmware — please ensure devices are updated before filing issues.
