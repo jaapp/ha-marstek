@@ -13,13 +13,13 @@ set_manual_schedule:
   fields:
     entity_id:
       name: Operating Mode Entity
-      description: The operating mode select entity to configure.
+      description: The operating mode button entity to configure.
       required: true
-      example: "select.marstek_operating_mode"
+      example: "button.marstek_manual_mode"
       selector:
         entity:
           integration: marstek_local_api
-          domain: select
+          domain: button
     time_num:
       name: Schedule Slot
       description: Schedule slot number (0-9). Each slot is an independent schedule.
@@ -91,13 +91,13 @@ set_manual_schedules:
   fields:
     entity_id:
       name: Operating Mode Entity
-      description: The operating mode select entity to configure.
+      description: The operating mode button entity to configure.
       required: true
-      example: "select.marstek_operating_mode"
+      example: "button.marstek_manual_mode"
       selector:
         entity:
           integration: marstek_local_api
-          domain: select
+          domain: button
     schedules:
       name: Schedules
       description: List of schedules to configure. Each schedule requires time_num, start_time, end_time, and optionally days, power, and enabled. Power uses negative values for charging and positive values for discharging.
@@ -124,13 +124,13 @@ clear_manual_schedules:
   fields:
     entity_id:
       name: Operating Mode Entity
-      description: The operating mode select entity to clear schedules for.
+      description: The operating mode button entity to clear schedules for.
       required: true
-      example: "select.marstek_operating_mode"
+      example: "button.marstek_manual_mode"
       selector:
         entity:
           integration: marstek_local_api
-          domain: select
+          domain: button
 
 set_passive_mode:
   name: Set Passive Mode
