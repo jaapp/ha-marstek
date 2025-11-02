@@ -95,11 +95,94 @@ Every sensor listed above also exists in an aggregated form under the **Marstek 
 
 ## 6. Services
 
+### Data Synchronization
+
 | Service | Description | Parameters |
 | --- | --- | --- |
 | `marstek_local_api.request_data_sync` | Triggers an immediate poll of every configured coordinator. | Optional `entry_id` to refresh a specific config entry. |
 
-You can call the service from **Developer Tools → Services** when you need an on-demand refresh after physical changes or troubleshooting.
+### Manual Mode Scheduling
+
+The integration provides three services for configuring manual mode schedules. Manual mode allows you to define up to 10 time-based schedules that control when the battery charges/discharges and at what power level.
+
+> **Note:** The Marstek Local API does not support reading schedule configurations back from the device. Schedules are write-only, so the integration cannot display currently configured schedules.
+
+| Service | Description |
+| --- | --- |
+| `marstek_local_api.set_manual_schedule` | Configure a single schedule slot (0-9) with time, days, and power settings. |
+| `marstek_local_api.set_manual_schedules` | Configure multiple schedule slots at once using YAML. |
+| `marstek_local_api.clear_manual_schedules` | Disable all 10 schedule slots. |
+
+#### Setting a Single Schedule
+
+Configure one schedule slot at a time through the Home Assistant UI:
+
+```yaml
+service: marstek_local_api.set_manual_schedule
+data:
+  entity_id: select.marstek_operating_mode
+  time_num: 0  # Slot 0-9
+  start_time: "08:00"
+  end_time: "16:00"
+  days:
+    - mon
+    - tue
+    - wed
+    - thu
+    - fri
+  power: -2000  # Negative = charge limit (2000W), positive = discharge limit
+  enabled: true
+```
+
+#### Setting Multiple Schedules
+
+Configure several slots at once using YAML mode in Developer Tools → Services:
+
+```yaml
+service: marstek_local_api.set_manual_schedules
+data:
+  entity_id: select.marstek_operating_mode
+  schedules:
+    - time_num: 0
+      start_time: "08:00"
+      end_time: "16:00"
+      days: [mon, tue, wed, thu, fri]
+      power: -2000  # Charge at max 2000W
+      enabled: true
+    - time_num: 1
+      start_time: "18:00"
+      end_time: "22:00"
+      days: [mon, tue, wed, thu, fri]
+      power: 800  # Discharge at max 800W
+      enabled: true
+```
+
+#### Clearing All Schedules
+
+Remove all configured schedules by disabling all 10 slots:
+
+```yaml
+service: marstek_local_api.clear_manual_schedules
+data:
+  entity_id: select.marstek_operating_mode
+```
+
+#### Schedule Parameters
+
+- **time_num**: Schedule slot number (0-9). Each slot is independent.
+- **start_time** / **end_time**: 24-hour format (HH:MM). Schedules can span midnight.
+- **days**: List of weekdays (`mon`, `tue`, `wed`, `thu`, `fri`, `sat`, `sun`). Defaults to all days.
+- **power**: Power limit in watts. **Important:** Use negative values for charging (e.g., `-2000` = 2000W charge limit) and positive values for discharging (e.g., `800` = 800W discharge limit). Use `0` for no limit.
+- **enabled**: Whether this schedule is active (default: `true`).
+
+#### Important Notes
+
+- Changing the operating mode to Manual via the select entity will **not** activate any schedules automatically. You must configure schedules using the services above.
+- Multiple schedules can overlap. The device handles priority internally.
+- Schedule configurations are stored on the device and persist across reboots.
+- Since schedule reading is not supported, keep a copy of your schedule configuration in Home Assistant automations or scripts.
+
+You can call these services from **Developer Tools → Services** or use them in automations and scripts.
 
 ---
 
@@ -141,15 +224,22 @@ Quick note for issue reports (EN): always attach the integration diagnostics exp
 
 ### Standalone connectivity test
 
-In the repository you’ll find `test/test_discovery.py`, a small CLI that reuses the integration code to probe connectivity outside Home Assistant:
+In the repository you'll find `test/test_discovery.py`, a small CLI that reuses the integration code to probe connectivity outside Home Assistant:
 
 ```bash
 cd test
-python3 test_discovery.py              # broadcast discovery
-python3 test_discovery.py 192.168.7.101  # target a specific battery
+python3 test_discovery.py                              # broadcast discovery (read-only)
+python3 test_discovery.py 192.168.7.101                # target a specific battery (read-only)
+python3 test_discovery.py --set-test-schedule          # set test schedule on discovered device
+python3 test_discovery.py --clear-all-schedules        # clear all schedules on discovered device
+python3 test_discovery.py --set-test-schedule 192.168.7.101  # set test schedule on specific IP
 ```
 
-It discovers all reachable batteries, exercises every Local API method, and highlights network issues before you wire the devices into your HA instance.
+The read-only mode discovers all reachable batteries, exercises every Local API method, and highlights network issues before you wire the devices into your HA instance.
+
+The schedule testing flags allow you to verify manual mode schedule configuration without setting up Home Assistant. The test schedules configure:
+- **Slot 0** (Charge): 08:00-16:00, Monday-Friday, 2000W charge limit (power = -2000)
+- **Slot 1** (Discharge): 18:00-22:00, Monday-Friday, 800W discharge limit (power = 800)
 
 ---
 

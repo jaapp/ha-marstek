@@ -5,10 +5,16 @@ Tests the integration components using actual integration code.
 No logic duplication - imports and uses integration modules directly.
 
 Usage:
-  python3 test_discovery.py              # Auto-discovery
-  python3 test_discovery.py 192.168.7.101  # Test specific IP
+  python3 test_discovery.py                           # Auto-discovery (read-only)
+  python3 test_discovery.py 192.168.7.101             # Test specific IP (read-only)
+  python3 test_discovery.py --set-test-schedule       # Set test schedules on discovered device
+  python3 test_discovery.py --clear-all-schedules     # Clear all schedules on discovered device
+  python3 test_discovery.py --set-test-schedule 192.168.7.101  # Set on specific IP
+
+Test schedules: Slot 0 (charge 08:00-16:00 2000W), Slot 1 (discharge 18:00-22:00 800W)
 """
 
+import argparse
 import asyncio
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -177,6 +183,9 @@ MarstekUDPClient = api_module.MarstekUDPClient
 DEFAULT_PORT = const.DEFAULT_PORT
 DEVICE_MODEL_VENUS_D = const.DEVICE_MODEL_VENUS_D
 SENSOR_TYPES = sensor_module.SENSOR_TYPES
+MODE_MANUAL = const.MODE_MANUAL
+WEEKDAY_MAP = const.WEEKDAY_MAP
+MAX_SCHEDULE_SLOTS = const.MAX_SCHEDULE_SLOTS
 
 
 class MockHass:
@@ -196,6 +205,191 @@ def format_value(value, unit=""):
     if isinstance(value, (int, float)):
         return f"{value}{unit}"
     return str(value)
+
+
+def _days_to_week_set(days: list[str]) -> int:
+    """Convert list of day names to week_set bitmap."""
+    return sum(WEEKDAY_MAP[day] for day in days)
+
+
+async def test_set_schedule(target_ip: str | None = None):
+    """Test setting manual schedules on a device."""
+    print("=" * 80)
+    print("Marstek Local API - Test Set Schedules")
+    print("=" * 80)
+    print()
+
+    hass = MockHass()
+    api = MarstekUDPClient(hass, port=DEFAULT_PORT)
+
+    try:
+        await api.connect()
+
+        # Discover or use provided IP
+        if target_ip:
+            print(f"Testing schedule set on {target_ip}...")
+            api.host = target_ip
+        else:
+            print("Discovering devices...")
+            devices = await api.discover_devices(timeout=9)
+            if not devices:
+                print("❌ No devices found!")
+                return
+            device = devices[0]
+            api.host = device['ip']
+            print(f"Using first discovered device: {device['name']} ({device['ip']})")
+
+        print()
+        print("Setting test schedules:")
+        print()
+        print("  Schedule 1 (Charge):")
+        print("    Slot:       0")
+        print("    Time:       08:00 - 16:00")
+        print("    Days:       Monday - Friday")
+        print("    Power:      2000 W (charge limit)")
+        print("    Enabled:    Yes")
+        print()
+        print("  Schedule 2 (Discharge):")
+        print("    Slot:       1")
+        print("    Time:       18:00 - 22:00")
+        print("    Days:       Monday - Friday")
+        print("    Power:      800 W (discharge limit)")
+        print("    Enabled:    Yes")
+        print()
+
+        schedules = [
+            {
+                "time_num": 0,
+                "start_time": "08:00",
+                "end_time": "16:00",
+                "week_set": _days_to_week_set(["mon", "tue", "wed", "thu", "fri"]),
+                "power": -2000,  # Negative = charge
+                "enable": 1,
+            },
+            {
+                "time_num": 1,
+                "start_time": "18:00",
+                "end_time": "22:00",
+                "week_set": _days_to_week_set(["mon", "tue", "wed", "thu", "fri"]),
+                "power": 800,  # Positive = discharge
+                "enable": 1,
+            },
+        ]
+
+        failed_slots = []
+
+        for schedule in schedules:
+            config = {
+                "mode": MODE_MANUAL,
+                "manual_cfg": schedule,
+            }
+
+            try:
+                success = await api.set_es_mode(config)
+                if success:
+                    print(f"  ✅ Set schedule slot {schedule['time_num']}")
+                else:
+                    print(f"  ❌ Device rejected slot {schedule['time_num']}")
+                    failed_slots.append(schedule['time_num'])
+            except Exception as err:
+                print(f"  ❌ Error setting slot {schedule['time_num']}: {err}")
+                failed_slots.append(schedule['time_num'])
+
+            # Small delay between calls
+            await asyncio.sleep(0.5)
+
+        print()
+        if failed_slots:
+            print(f"❌ Failed to set slots: {failed_slots}")
+        else:
+            print("✅ Successfully set all test schedules!")
+
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        await api.disconnect()
+
+    print()
+    print("=" * 80)
+
+
+async def test_clear_schedules(target_ip: str | None = None):
+    """Test clearing all manual schedules on a device."""
+    print("=" * 80)
+    print("Marstek Local API - Test Clear All Schedules")
+    print("=" * 80)
+    print()
+
+    hass = MockHass()
+    api = MarstekUDPClient(hass, port=DEFAULT_PORT)
+
+    try:
+        await api.connect()
+
+        # Discover or use provided IP
+        if target_ip:
+            print(f"Testing schedule clear on {target_ip}...")
+            api.host = target_ip
+        else:
+            print("Discovering devices...")
+            devices = await api.discover_devices(timeout=9)
+            if not devices:
+                print("❌ No devices found!")
+                return
+            device = devices[0]
+            api.host = device['ip']
+            print(f"Using first discovered device: {device['name']} ({device['ip']})")
+
+        print()
+        print(f"Clearing all {MAX_SCHEDULE_SLOTS} schedule slots...")
+        print()
+
+        failed_slots = []
+
+        for i in range(MAX_SCHEDULE_SLOTS):
+            config = {
+                "mode": MODE_MANUAL,
+                "manual_cfg": {
+                    "time_num": i,
+                    "start_time": "00:00",
+                    "end_time": "00:00",
+                    "week_set": 0,
+                    "power": 0,
+                    "enable": 0,
+                },
+            }
+
+            try:
+                success = await api.set_es_mode(config)
+                if success:
+                    print(f"  ✅ Cleared slot {i}")
+                else:
+                    print(f"  ❌ Failed to clear slot {i}")
+                    failed_slots.append(i)
+            except Exception as err:
+                print(f"  ❌ Error clearing slot {i}: {err}")
+                failed_slots.append(i)
+
+            # Small delay between calls
+            await asyncio.sleep(0.3)
+
+        print()
+        if failed_slots:
+            print(f"❌ Failed to clear slots: {failed_slots}")
+        else:
+            print("✅ Successfully cleared all schedules!")
+
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        await api.disconnect()
+
+    print()
+    print("=" * 80)
 
 
 async def discover_and_test():
@@ -448,8 +642,40 @@ async def discover_and_test():
 
 def main():
     """Run the test."""
+    parser = argparse.ArgumentParser(
+        description="Test script for Marstek Local API integration"
+    )
+    parser.add_argument(
+        "ip",
+        nargs="?",
+        help="Optional target device IP address (default: auto-discover)",
+    )
+    parser.add_argument(
+        "--set-test-schedule",
+        action="store_true",
+        help="Set test schedules (slot 0: charge 08:00-16:00 2000W, slot 1: discharge 18:00-22:00 800W)",
+    )
+    parser.add_argument(
+        "--clear-all-schedules",
+        action="store_true",
+        help="Clear all 10 schedule slots",
+    )
+
+    args = parser.parse_args()
+
+    # Validate flags
+    if args.set_test_schedule and args.clear_all_schedules:
+        print("Error: Cannot use --set-test-schedule and --clear-all-schedules together")
+        sys.exit(1)
+
     try:
-        asyncio.run(discover_and_test())
+        if args.set_test_schedule:
+            asyncio.run(test_set_schedule(args.ip))
+        elif args.clear_all_schedules:
+            asyncio.run(test_clear_schedules(args.ip))
+        else:
+            # Default: read-only discovery and testing
+            asyncio.run(discover_and_test())
     except KeyboardInterrupt:
         print("\n\nTest interrupted by user")
         sys.exit(0)
