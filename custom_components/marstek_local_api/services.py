@@ -311,7 +311,9 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                     MODE_MANUAL,
                     {"manual_cfg": manual_cfg},
                 )
-                await _refresh_after_write(device_coordinator, aggregate_coordinator)
+                hass.async_create_task(
+                    _refresh_after_write(device_coordinator, aggregate_coordinator)
+                )
             else:
                 raise HomeAssistantError(
                     f"Device rejected schedule configuration for slot {time_num}"
@@ -382,7 +384,9 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 device_identifier,
                 MODE_MANUAL,
             )
-        await _refresh_after_write(device_coordinator, aggregate_coordinator)
+        hass.async_create_task(
+            _refresh_after_write(device_coordinator, aggregate_coordinator)
+        )
 
         if failed_slots:
             raise HomeAssistantError(
@@ -442,7 +446,9 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 device_identifier,
                 MODE_MANUAL,
             )
-        await _refresh_after_write(device_coordinator, aggregate_coordinator)
+        hass.async_create_task(
+            _refresh_after_write(device_coordinator, aggregate_coordinator)
+        )
 
         if failed_slots:
             raise HomeAssistantError(
@@ -510,7 +516,9 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                     MODE_PASSIVE,
                     {"passive_cfg": config["passive_cfg"]},
                 )
-                await _refresh_after_write(device_coordinator, aggregate_coordinator)
+                hass.async_create_task(
+                    _refresh_after_write(device_coordinator, aggregate_coordinator)
+                )
             else:
                 raise HomeAssistantError(
                     f"Device rejected passive mode configuration (power={power}W, duration={duration}s)"
