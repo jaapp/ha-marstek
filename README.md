@@ -1,5 +1,8 @@
 # Marstek Local API for Home Assistant
 
+> **Firmware warning:** Marstek’s Local API firmware is still immature, so most glitches originate in the batteries, not here.
+> Report issues to Marstek unless you can clearly trace them to this project.
+
 Home Assistant integration that talks directly to Marstek Venus C/D/E batteries over the official Local API. It delivers local-only telemetry, mode control, and fleet-wide aggregation without relying on the Marstek cloud.
 
 ---

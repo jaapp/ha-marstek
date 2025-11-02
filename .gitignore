@@ -38,3 +38,7 @@ wheels/
 
 # Home Assistant
 home-assistant.log
+test/logs/
+
+# Git worktrees
+.worktrees/
