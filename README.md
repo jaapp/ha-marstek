@@ -112,13 +112,13 @@ The `sensor.marstek_operating_mode` displays the current active mode (Auto, AI, 
 
 | Service | Description | Parameters |
 | --- | --- | --- |
-| `marstek_local_api.request_data_sync` | Triggers an immediate poll of every configured coordinator. | Optional `entry_id` to refresh a specific config entry. |
+| `marstek_local_api.request_data_sync` | Triggers an immediate poll of every configured coordinator. | Optional `entry_id` (specific config entry) and/or `device_id` (single battery). |
 
 ### Manual Mode Scheduling
 
 The integration provides three services for configuring manual mode schedules. Manual mode allows you to define up to 10 time-based schedules that control when the battery charges/discharges and at what power level.
 
-> Use the **manual mode button entity** (`button.marstek_manual_mode`) for all schedule services. Other mode buttons cannot configure schedules.
+> Select the **battery device** for all schedule services. The integration resolves the correct manual mode button automatically.
 
 > **Note:** The Marstek Local API does not support reading schedule configurations back from the device. Schedules are write-only, so the integration cannot display currently configured schedules.
 
@@ -135,8 +135,7 @@ Configure one schedule slot at a time through the Home Assistant UI:
 ```yaml
 service: marstek_local_api.set_manual_schedule
 data:
-  entity_id: button.marstek_manual_mode
-  # or supply device_id: "1234567890abcdef1234567890abcdef"
+  device_id: "1234567890abcdef1234567890abcdef"
   time_num: 0  # Slot 0-9
   start_time: "08:00"
   end_time: "16:00"
@@ -157,8 +156,7 @@ Configure several slots at once using YAML mode in Developer Tools → Services:
 ```yaml
 service: marstek_local_api.set_manual_schedules
 data:
-  entity_id: button.marstek_manual_mode
-  # or supply device_id instead of entity_id
+  device_id: "1234567890abcdef1234567890abcdef"
   schedules:
     - time_num: 0
       start_time: "08:00"
@@ -181,8 +179,7 @@ Remove all configured schedules by disabling all 10 slots:
 ```yaml
 service: marstek_local_api.clear_manual_schedules
 data:
-  entity_id: button.marstek_manual_mode
-  # or device_id: "1234567890abcdef1234567890abcdef"
+  device_id: "1234567890abcdef1234567890abcdef"
 ```
 
 #### Schedule Parameters
@@ -192,7 +189,7 @@ data:
 - **days**: List of weekdays (`mon`, `tue`, `wed`, `thu`, `fri`, `sat`, `sun`). Defaults to all days.
 - **power**: Power limit in watts. **Important:** Use negative values for charging (e.g., `-2000` = 2000W charge limit) and positive values for discharging (e.g., `800` = 800W discharge limit). Use `0` for no limit.
 - **enabled**: Whether this schedule is active (default: `true`).
-- **device_id**: Optional Home Assistant device ID (alternative to `entity_id`). When supplied, the integration automatically targets the battery’s manual mode button.
+- **device_id**: Home Assistant device ID of the target battery (required).
 
 #### Important Notes
 
@@ -205,9 +202,7 @@ You can call these services from **Developer Tools → Services** or use them in
 
 ### Passive Mode Control
 
-The `marstek_local_api.set_passive_mode` service enables **Passive mode** for direct power control. Passive mode allows you to charge or discharge the battery at a specific power level for a defined duration.
-
-Provide either the operating mode sensor entity (`entity_id`) or choose the battery via `device_id`.
+The `marstek_local_api.set_passive_mode` service enables **Passive mode** for direct power control. Passive mode allows you to charge or discharge the selected battery at a specific power level for a defined duration.
 
 **Important:** Power values use signed integers:
 - **Negative values** = Charging (e.g., `-2000` means charge at 2000W)
@@ -217,8 +212,7 @@ Provide either the operating mode sensor entity (`entity_id`) or choose the batt
 
 | Parameter | Required | Type | Range | Description |
 | --- | --- | --- | --- | --- |
-| `entity_id` | No | string | - | Operating mode sensor entity (e.g., `sensor.marstek_operating_mode`). Provide this or `device_id`. |
-| `device_id` | No | string | - | Alternative to `entity_id`. Select the battery device and the integration resolves the operating mode sensor automatically. |
+| `device_id` | Yes | string | - | Battery to control. The integration resolves the operating mode sensor automatically. |
 | `power` | Yes | integer | -10000 to 10000 | Power in watts (negative = charge, positive = discharge) |
 | `duration` | Yes | integer | 1 to 86400 | Duration in seconds (max 24 hours) |
 
@@ -228,8 +222,7 @@ Provide either the operating mode sensor entity (`entity_id`) or choose the batt
 ```yaml
 service: marstek_local_api.set_passive_mode
 data:
-  entity_id: sensor.marstek_operating_mode
-  # or device_id: "1234567890abcdef1234567890abcdef"
+  device_id: "1234567890abcdef1234567890abcdef"
   power: -2000  # Negative = charging
   duration: 3600  # 1 hour in seconds
 ```
@@ -238,8 +231,7 @@ data:
 ```yaml
 service: marstek_local_api.set_passive_mode
 data:
-  entity_id: sensor.marstek_operating_mode
-  # or device_id: "1234567890abcdef1234567890abcdef"
+  device_id: "1234567890abcdef1234567890abcdef"
   power: 1500  # Positive = discharging
   duration: 1800  # 30 minutes in seconds
 ```
@@ -254,7 +246,7 @@ automation:
     action:
       - service: marstek_local_api.set_passive_mode
         data:
-          entity_id: sensor.marstek_operating_mode
+          device_id: "1234567890abcdef1234567890abcdef"
           power: -3000  # Charge at 3000W
           duration: 14400  # 4 hours
 ```

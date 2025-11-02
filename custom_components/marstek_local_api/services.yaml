@@ -6,24 +6,21 @@ request_data_sync:
       name: Config Entry ID
       description: Optional config entry ID to refresh. When omitted, all entries are refreshed.
       example: "1234567890abcdef1234567890abcdef"
+    device_id:
+      name: Battery
+      description: Optional battery to refresh. When omitted, every active battery is refreshed.
+      selector:
+        device:
+          integration: marstek_local_api
 
 set_manual_schedule:
   name: Set Manual Schedule
-  description: Configure a single manual mode time schedule slot. Provide either the manual mode button entity or select the battery device.
+  description: Configure a single manual mode time schedule slot for the selected battery.
   fields:
-    entity_id:
-      name: Manual Mode Button
-      description: "The manual mode button entity to configure (e.g., button.marstek_manual_mode)."
-      required: false
-      example: "button.marstek_manual_mode"
-      selector:
-        entity:
-          integration: marstek_local_api
-          domain: button
     device_id:
       name: Battery
       description: "Select the battery whose manual mode schedules you want to configure."
-      required: false
+      required: true
       selector:
         device:
           integration: marstek_local_api
@@ -94,21 +91,12 @@ set_manual_schedule:
 
 set_manual_schedules:
   name: Set Multiple Manual Schedules
-  description: Configure manual mode schedules using YAML. Provide the manual mode button entity or select the battery device.
+  description: Configure manual mode schedules using YAML for the selected battery.
   fields:
-    entity_id:
-      name: Manual Mode Button
-      description: "The manual mode button entity to configure (e.g., button.marstek_manual_mode)."
-      required: false
-      example: "button.marstek_manual_mode"
-      selector:
-        entity:
-          integration: marstek_local_api
-          domain: button
     device_id:
       name: Battery
       description: "Select the battery whose manual mode schedules you want to configure."
-      required: false
+      required: true
       selector:
         device:
           integration: marstek_local_api
@@ -136,42 +124,24 @@ set_manual_schedules:
 
 clear_manual_schedules:
   name: Clear Manual Schedules
-  description: Remove all configured manual mode schedules by disabling all 10 schedule slots. Provide the manual mode button or select the battery device.
+  description: Remove all configured manual mode schedules by disabling all 10 schedule slots on the selected battery.
   fields:
-    entity_id:
-      name: Manual Mode Button
-      description: "The manual mode button entity to clear schedules for (e.g., button.marstek_manual_mode)."
-      required: false
-      example: "button.marstek_manual_mode"
-      selector:
-        entity:
-          integration: marstek_local_api
-          domain: button
     device_id:
       name: Battery
       description: "Select the battery whose schedules you want to clear."
-      required: false
+      required: true
       selector:
         device:
           integration: marstek_local_api
 
 set_passive_mode:
   name: Set Passive Mode
-  description: Switch to Passive mode with specified power and duration. Use the operating mode sensor entity or select the battery device. Negative power values charge (e.g., -2000 = charge at 2000W), positive values discharge (e.g., 1500 = discharge at 1500W).
+  description: Switch the selected battery to Passive mode with specified power and duration. Negative power values charge (e.g., -2000 = charge at 2000W), positive values discharge (e.g., 1500 = discharge at 1500W).
   fields:
-    entity_id:
-      name: Operating Mode Sensor
-      description: The operating mode sensor entity to configure.
-      required: false
-      example: "sensor.marstek_operating_mode"
-      selector:
-        entity:
-          integration: marstek_local_api
-          domain: sensor
     device_id:
       name: Battery
       description: "Select the battery whose passive mode you want to change."
-      required: false
+      required: true
       selector:
         device:
           integration: marstek_local_api

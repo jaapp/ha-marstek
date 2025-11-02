@@ -32,6 +32,7 @@ _LOGGER = logging.getLogger(__name__)
 SERVICE_REQUEST_SYNC_SCHEMA = vol.Schema(
     {
         vol.Optional("entry_id"): cv.string,
+        vol.Optional("device_id"): cv.string,
     }
 )
 
@@ -41,75 +42,52 @@ def _days_to_week_set(days: list[str]) -> int:
     return sum(WEEKDAY_MAP[day] for day in days)
 
 
-def _validate_has_target(data: dict) -> dict:
-    """Ensure either entity_id or device_id is supplied."""
-    if "entity_id" not in data and "device_id" not in data:
-        raise vol.Invalid("Provide either entity_id or device_id")
-    return data
-
-
-SERVICE_SET_MANUAL_SCHEDULE_SCHEMA = vol.All(
-    vol.Schema(
-        {
-            vol.Optional("entity_id"): cv.entity_id,
-            vol.Optional("device_id"): cv.string,
-            vol.Required("time_num"): vol.All(vol.Coerce(int), vol.Range(min=0, max=MAX_SCHEDULE_SLOTS - 1)),
-            vol.Required("start_time"): cv.time,
-            vol.Required("end_time"): cv.time,
-            vol.Optional("days", default=list(WEEKDAY_MAP.keys())): vol.All(
-                cv.ensure_list, [vol.In(WEEKDAY_MAP.keys())]
-            ),
-            vol.Optional("power", default=0): vol.Coerce(int),  # Negative=charge, positive=discharge, 0=no limit
-            vol.Optional("enabled", default=True): cv.boolean,
-        }
-    ),
-    _validate_has_target,
+SERVICE_SET_MANUAL_SCHEDULE_SCHEMA = vol.Schema(
+    {
+        vol.Required("device_id"): cv.string,
+        vol.Required("time_num"): vol.All(vol.Coerce(int), vol.Range(min=0, max=MAX_SCHEDULE_SLOTS - 1)),
+        vol.Required("start_time"): cv.time,
+        vol.Required("end_time"): cv.time,
+        vol.Optional("days", default=list(WEEKDAY_MAP.keys())): vol.All(
+            cv.ensure_list, [vol.In(WEEKDAY_MAP.keys())]
+        ),
+        vol.Optional("power", default=0): vol.Coerce(int),  # Negative=charge, positive=discharge, 0=no limit
+        vol.Optional("enabled", default=True): cv.boolean,
+    }
 )
 
-SERVICE_SET_MANUAL_SCHEDULES_SCHEMA = vol.All(
-    vol.Schema(
-        {
-            vol.Optional("entity_id"): cv.entity_id,
-            vol.Optional("device_id"): cv.string,
-            vol.Required("schedules"): [
-                vol.Schema(
-                    {
-                        vol.Required("time_num"): vol.All(vol.Coerce(int), vol.Range(min=0, max=MAX_SCHEDULE_SLOTS - 1)),
-                        vol.Required("start_time"): cv.time,
-                        vol.Required("end_time"): cv.time,
-                        vol.Optional("days", default=list(WEEKDAY_MAP.keys())): vol.All(
-                            cv.ensure_list, [vol.In(WEEKDAY_MAP.keys())]
-                        ),
-                        vol.Optional("power", default=0): vol.Coerce(int),  # Negative=charge, positive=discharge, 0=no limit
-                        vol.Optional("enabled", default=True): cv.boolean,
-                    }
-                )
-            ],
-        }
-    ),
-    _validate_has_target,
+SERVICE_SET_MANUAL_SCHEDULES_SCHEMA = vol.Schema(
+    {
+        vol.Required("device_id"): cv.string,
+        vol.Required("schedules"): [
+            vol.Schema(
+                {
+                    vol.Required("time_num"): vol.All(vol.Coerce(int), vol.Range(min=0, max=MAX_SCHEDULE_SLOTS - 1)),
+                    vol.Required("start_time"): cv.time,
+                    vol.Required("end_time"): cv.time,
+                    vol.Optional("days", default=list(WEEKDAY_MAP.keys())): vol.All(
+                        cv.ensure_list, [vol.In(WEEKDAY_MAP.keys())]
+                    ),
+                    vol.Optional("power", default=0): vol.Coerce(int),  # Negative=charge, positive=discharge, 0=no limit
+                    vol.Optional("enabled", default=True): cv.boolean,
+                }
+            )
+        ],
+    }
 )
 
-SERVICE_CLEAR_MANUAL_SCHEDULES_SCHEMA = vol.All(
-    vol.Schema(
-        {
-            vol.Optional("entity_id"): cv.entity_id,
-            vol.Optional("device_id"): cv.string,
-        }
-    ),
-    _validate_has_target,
+SERVICE_CLEAR_MANUAL_SCHEDULES_SCHEMA = vol.Schema(
+    {
+        vol.Required("device_id"): cv.string,
+    }
 )
 
-SERVICE_SET_PASSIVE_MODE_SCHEMA = vol.All(
-    vol.Schema(
-        {
-            vol.Optional("entity_id"): cv.entity_id,
-            vol.Optional("device_id"): cv.string,
-            vol.Required("power"): vol.All(vol.Coerce(int), vol.Range(min=-10000, max=10000)),
-            vol.Required("duration"): vol.All(vol.Coerce(int), vol.Range(min=1, max=86400)),
-        }
-    ),
-    _validate_has_target,
+SERVICE_SET_PASSIVE_MODE_SCHEMA = vol.Schema(
+    {
+        vol.Required("device_id"): cv.string,
+        vol.Required("power"): vol.All(vol.Coerce(int), vol.Range(min=-10000, max=10000)),
+        vol.Required("duration"): vol.All(vol.Coerce(int), vol.Range(min=1, max=86400)),
+    }
 )
 
 
@@ -285,54 +263,24 @@ def _find_entity_for_device(
     return matches[0]
 
 
-def _resolve_manual_button_entity_id(
-    hass: HomeAssistant,
-    entity_id: str | None,
-    device_id: str | None,
-) -> str:
-    """Resolve the manual mode button entity from an entity_id or device_id."""
-    if device_id:
-        derived = _find_entity_for_device(
-            hass,
-            device_id,
-            domain="button",
-            unique_suffix="_manual_mode_button",
-        )
-        if entity_id and entity_id != derived:
-            raise HomeAssistantError(
-                f"Provided entity_id {entity_id} does not belong to device {device_id}"
-            )
-        entity_id = derived
-
-    if not entity_id:
-        raise HomeAssistantError("Manual mode button entity could not be resolved")
-
-    return entity_id
+def _resolve_manual_button_entity_id(hass: HomeAssistant, device_id: str) -> str:
+    """Resolve the manual mode button entity for a given device."""
+    return _find_entity_for_device(
+        hass,
+        device_id,
+        domain="button",
+        unique_suffix="_manual_mode_button",
+    )
 
 
-def _resolve_operating_mode_sensor_entity_id(
-    hass: HomeAssistant,
-    entity_id: str | None,
-    device_id: str | None,
-) -> str:
-    """Resolve the operating mode sensor entity from an entity_id or device_id."""
-    if device_id:
-        derived = _find_entity_for_device(
-            hass,
-            device_id,
-            domain="sensor",
-            unique_suffix="_operating_mode",
-        )
-        if entity_id and entity_id != derived:
-            raise HomeAssistantError(
-                f"Provided entity_id {entity_id} does not belong to device {device_id}"
-            )
-        entity_id = derived
-
-    if not entity_id:
-        raise HomeAssistantError("Operating mode sensor entity could not be resolved")
-
-    return entity_id
+def _resolve_operating_mode_sensor_entity_id(hass: HomeAssistant, device_id: str) -> str:
+    """Resolve the operating mode sensor entity for a given device."""
+    return _find_entity_for_device(
+        hass,
+        device_id,
+        domain="sensor",
+        unique_suffix="_operating_mode",
+    )
 
 
 async def async_setup_services(hass: HomeAssistant) -> None:
@@ -344,10 +292,36 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     async def _async_request_sync(call: ServiceCall) -> None:
         """Trigger an on-demand refresh across configured coordinators."""
         entry_id: str | None = call.data.get("entry_id")
+        device_id: str | None = call.data.get("device_id")
         domain_data = hass.data.get(DOMAIN)
 
         if not domain_data:
             _LOGGER.debug("Request sync skipped - integration has no active entries")
+            return
+
+        if device_id:
+            device_registry = dr.async_get(hass)
+            device_entry = device_registry.async_get(device_id)
+            if not device_entry:
+                raise HomeAssistantError(f"Unknown device_id: {device_id}")
+
+            if not device_entry.config_entries:
+                raise HomeAssistantError(
+                    f"Device {device_id} is not associated with any Marstek config entry"
+                )
+
+            refreshed = False
+            for candidate_entry_id in device_entry.config_entries:
+                entry_payload = domain_data.get(candidate_entry_id)
+                if not entry_payload:
+                    continue
+                await _async_refresh_entry(candidate_entry_id, entry_payload)
+                refreshed = True
+
+            if not refreshed:
+                raise HomeAssistantError(
+                    f"Device {device_id} is not part of an active Marstek config entry"
+                )
             return
 
         if entry_id:
@@ -373,11 +347,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
     async def _async_set_manual_schedule(call: ServiceCall) -> None:
         """Set a single manual mode schedule."""
-        entity_id = _resolve_manual_button_entity_id(
-            hass,
-            call.data.get("entity_id"),
-            call.data.get("device_id"),
-        )
+        device_id = call.data["device_id"]
+        entity_id = _resolve_manual_button_entity_id(hass, device_id)
         time_num = call.data["time_num"]
         start_time: time = call.data["start_time"]
         end_time: time = call.data["end_time"]
@@ -390,7 +361,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             entity_id,
             require_manual_button=True,
         )
-        target_label = device_identifier or entity_id
+        target_label = device_identifier or device_id
 
         # Build manual_cfg
         manual_cfg = {
@@ -434,11 +405,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
     async def _async_set_manual_schedules(call: ServiceCall) -> None:
         """Set multiple manual mode schedules at once."""
-        entity_id = _resolve_manual_button_entity_id(
-            hass,
-            call.data.get("entity_id"),
-            call.data.get("device_id"),
-        )
+        device_id = call.data["device_id"]
+        entity_id = _resolve_manual_button_entity_id(hass, device_id)
         schedules = call.data["schedules"]
 
         device_coordinator, aggregate_coordinator, device_identifier = _resolve_entity_context(
@@ -446,7 +414,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             entity_id,
             require_manual_button=True,
         )
-        target_label = device_identifier or entity_id
+        target_label = device_identifier or device_id
 
         _LOGGER.info("Setting %d manual schedules for %s", len(schedules), target_label)
 
@@ -510,18 +478,15 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
     async def _async_clear_manual_schedules(call: ServiceCall) -> None:
         """Clear all manual schedules by disabling all slots."""
-        entity_id = _resolve_manual_button_entity_id(
-            hass,
-            call.data.get("entity_id"),
-            call.data.get("device_id"),
-        )
+        device_id = call.data["device_id"]
+        entity_id = _resolve_manual_button_entity_id(hass, device_id)
 
         device_coordinator, aggregate_coordinator, device_identifier = _resolve_entity_context(
             hass,
             entity_id,
             require_manual_button=True,
         )
-        target_label = device_identifier or entity_id
+        target_label = device_identifier or device_id
 
         _LOGGER.info("Clearing all manual schedules for %s", target_label)
 
@@ -596,11 +561,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
     async def _async_set_passive_mode(call: ServiceCall) -> None:
         """Set passive mode with specified power and duration."""
-        entity_id = _resolve_operating_mode_sensor_entity_id(
-            hass,
-            call.data.get("entity_id"),
-            call.data.get("device_id"),
-        )
+        device_id = call.data["device_id"]
+        entity_id = _resolve_operating_mode_sensor_entity_id(hass, device_id)
         power = call.data["power"]
         duration = call.data["duration"]
 
@@ -608,7 +570,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             hass,
             entity_id,
         )
-        target_label = device_identifier or entity_id
+        target_label = device_identifier or device_id
 
         # Build passive mode config
         config = {
