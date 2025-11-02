@@ -96,6 +96,7 @@ SERVICE_REQUEST_SYNC: Final = "request_data_sync"
 SERVICE_SET_MANUAL_SCHEDULE: Final = "set_manual_schedule"
 SERVICE_SET_MANUAL_SCHEDULES: Final = "set_manual_schedules"
 SERVICE_CLEAR_MANUAL_SCHEDULES: Final = "clear_manual_schedules"
+SERVICE_SET_PASSIVE_MODE: Final = "set_passive_mode"
 
 # Schedule configuration
 WEEKDAY_MAP: Final = {

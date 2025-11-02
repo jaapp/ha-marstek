@@ -85,7 +85,7 @@ After setup you can return to **Settings → Devices & Services → Marstek Loca
 |  | `total_load_energy` | kWh | Lifetime load energy | 1x | 60 |
 | **Energy meter / CT** | `ct_phase_a_power`, `ct_phase_b_power`, `ct_phase_c_power` | W | Per-phase measurements (if CTs installed) | 5x | 300 |
 |  | `ct_total_power` | W | CT aggregate | 5x | 300 |
-| **Mode** | `operating_mode` | text | Auto / AI / Manual / Passive | 5x | 300 |
+| **Mode** | `operating_mode` | text | Current mode (read-only sensor) | 5x | 300 |
 | **PV (Venus D only)** | `pv_power`, `pv_voltage`, `pv_current` | W / V / A | MPPT telemetry | 5x | 300 |
 | **Network** | `wifi_rssi` | dBm | Wi-Fi signal | 10x | 600 |
 |  | `wifi_ssid`, `wifi_ip`, `wifi_gateway`, `wifi_subnet`, `wifi_dns` | text | Wi-Fi configuration | 10x | 600 |
@@ -93,6 +93,16 @@ After setup you can return to **Settings → Devices & Services → Marstek Loca
 | **Diagnostics** | `last_message_received` | seconds | Time since the last successful poll | 1x | 60 |
 
 Every sensor listed above also exists in an aggregated form under the **Marstek System** device whenever you manage multiple batteries together (prefixed with `system_`).
+
+### Mode Control Buttons
+
+Each battery exposes three button entities for quick mode switching:
+
+- `button.marstek_auto_mode` - Switch to Auto mode
+- `button.marstek_ai_mode` - Switch to AI mode
+- `button.marstek_manual_mode` - Switch to Manual mode
+
+The `sensor.marstek_operating_mode` displays the current active mode (Auto, AI, Manual, or Passive). **Passive mode** requires parameters (power and duration) and can only be activated via the `set_passive_mode` service (see Services section below).
 
 ---
 
@@ -186,6 +196,57 @@ data:
 - Since schedule reading is not supported, keep a copy of your schedule configuration in Home Assistant automations or scripts.
 
 You can call these services from **Developer Tools → Services** or use them in automations and scripts.
+
+### Passive Mode Control
+
+The `marstek_local_api.set_passive_mode` service enables **Passive mode** for direct power control. Passive mode allows you to charge or discharge the battery at a specific power level for a defined duration.
+
+**Important:** Power values use signed integers:
+- **Negative values** = Charging (e.g., `-2000` means charge at 2000W)
+- **Positive values** = Discharging (e.g., `1500` means discharge at 1500W)
+
+#### Service Parameters
+
+| Parameter | Required | Type | Range | Description |
+| --- | --- | --- | --- | --- |
+| `entity_id` | Yes | string | - | The operating mode sensor entity (e.g., `sensor.marstek_operating_mode`) |
+| `power` | Yes | integer | -10000 to 10000 | Power in watts (negative = charge, positive = discharge) |
+| `duration` | Yes | integer | 1 to 86400 | Duration in seconds (max 24 hours) |
+
+#### Examples
+
+**Charge at 2000W for 1 hour:**
+```yaml
+service: marstek_local_api.set_passive_mode
+data:
+  entity_id: sensor.marstek_operating_mode
+  power: -2000  # Negative = charging
+  duration: 3600  # 1 hour in seconds
+```
+
+**Discharge at 1500W for 30 minutes:**
+```yaml
+service: marstek_local_api.set_passive_mode
+data:
+  entity_id: sensor.marstek_operating_mode
+  power: 1500  # Positive = discharging
+  duration: 1800  # 30 minutes in seconds
+```
+
+**Use in an automation (charge during cheap electricity hours):**
+```yaml
+automation:
+  - alias: "Charge battery during off-peak hours"
+    trigger:
+      - platform: time
+        at: "02:00:00"
+    action:
+      - service: marstek_local_api.set_passive_mode
+        data:
+          entity_id: sensor.marstek_operating_mode
+          power: -3000  # Charge at 3000W
+          duration: 14400  # 4 hours
+```
 
 ---
 

@@ -16,10 +16,12 @@ from .const import (
     DOMAIN,
     MAX_SCHEDULE_SLOTS,
     MODE_MANUAL,
+    MODE_PASSIVE,
     SERVICE_CLEAR_MANUAL_SCHEDULES,
     SERVICE_REQUEST_SYNC,
     SERVICE_SET_MANUAL_SCHEDULE,
     SERVICE_SET_MANUAL_SCHEDULES,
+    SERVICE_SET_PASSIVE_MODE,
     WEEKDAY_MAP,
 )
 from .coordinator import MarstekDataUpdateCoordinator, MarstekMultiDeviceCoordinator
@@ -70,6 +72,14 @@ SERVICE_SET_MANUAL_SCHEDULES_SCHEMA = vol.Schema(
 SERVICE_CLEAR_MANUAL_SCHEDULES_SCHEMA = vol.Schema(
     {
         vol.Required("entity_id"): cv.entity_id,
+    }
+)
+
+SERVICE_SET_PASSIVE_MODE_SCHEMA = vol.Schema(
+    {
+        vol.Required("entity_id"): cv.entity_id,
+        vol.Required("power"): vol.All(vol.Coerce(int), vol.Range(min=-10000, max=10000)),
+        vol.Required("duration"): vol.All(vol.Coerce(int), vol.Range(min=1, max=86400)),
     }
 )
 
@@ -311,10 +321,58 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         schema=SERVICE_CLEAR_MANUAL_SCHEDULES_SCHEMA,
     )
 
+    async def _async_set_passive_mode(call: ServiceCall) -> None:
+        """Set passive mode with specified power and duration."""
+        entity_id = call.data["entity_id"]
+        power = call.data["power"]
+        duration = call.data["duration"]
+
+        # Find coordinator
+        coordinator = _find_coordinator_for_entity(hass, entity_id)
+        if not coordinator:
+            raise HomeAssistantError(f"Could not find coordinator for entity: {entity_id}")
+
+        # Build passive mode config
+        config = {
+            "mode": MODE_PASSIVE,
+            "passive_cfg": {
+                "power": power,
+                "cd_time": duration,
+            },
+        }
+
+        # Set mode via API
+        try:
+            success = await coordinator.api.set_es_mode(config)
+            if success:
+                _LOGGER.info(
+                    "Successfully set passive mode: power=%dW, duration=%ds for %s",
+                    power,
+                    duration,
+                    entity_id,
+                )
+                # Refresh coordinator
+                await coordinator.async_request_refresh()
+            else:
+                raise HomeAssistantError(
+                    f"Device rejected passive mode configuration (power={power}W, duration={duration}s)"
+                )
+        except Exception as err:
+            _LOGGER.error("Error setting passive mode: %s", err)
+            raise HomeAssistantError(f"Failed to set passive mode: {err}") from err
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_PASSIVE_MODE,
+        _async_set_passive_mode,
+        schema=SERVICE_SET_PASSIVE_MODE_SCHEMA,
+    )
+
     _LOGGER.info("Registered service %s.%s", DOMAIN, SERVICE_REQUEST_SYNC)
     _LOGGER.info("Registered service %s.%s", DOMAIN, SERVICE_SET_MANUAL_SCHEDULE)
     _LOGGER.info("Registered service %s.%s", DOMAIN, SERVICE_SET_MANUAL_SCHEDULES)
     _LOGGER.info("Registered service %s.%s", DOMAIN, SERVICE_CLEAR_MANUAL_SCHEDULES)
+    _LOGGER.info("Registered service %s.%s", DOMAIN, SERVICE_SET_PASSIVE_MODE)
 
 
 async def async_unload_services(hass: HomeAssistant) -> None:
@@ -334,6 +392,10 @@ async def async_unload_services(hass: HomeAssistant) -> None:
     if hass.services.has_service(DOMAIN, SERVICE_CLEAR_MANUAL_SCHEDULES):
         hass.services.async_remove(DOMAIN, SERVICE_CLEAR_MANUAL_SCHEDULES)
         _LOGGER.debug("Unregistered service %s.%s", DOMAIN, SERVICE_CLEAR_MANUAL_SCHEDULES)
+
+    if hass.services.has_service(DOMAIN, SERVICE_SET_PASSIVE_MODE):
+        hass.services.async_remove(DOMAIN, SERVICE_SET_PASSIVE_MODE)
+        _LOGGER.debug("Unregistered service %s.%s", DOMAIN, SERVICE_SET_PASSIVE_MODE)
 
 
 async def _async_refresh_entry(entry_id: str, payload: dict) -> None:
