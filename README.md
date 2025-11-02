@@ -273,6 +273,7 @@ Known issues:
 - Battery temperature may read 10× too high on older BMS versions.
 - API call timeouts (shown as warnings in the log).
 - Some API calls are not supported on older firmware — please ensure devices are updated before filing issues.
+- Manual mode requests must include a schedule: the API rejects `ES.SetMode` without `manual_cfg`, and because schedules are write-only the integration always sends a disabled placeholder in slot 9. Reapply your own slot 9 schedule after toggling Manual mode if needed.
 - Polling faster than 60s is not advised; devices have been reported to become unstable (e.g. losing CT003 connection).
  - Energy counters / capacity fields may be reported in Wh instead of kWh on certain firmware (values appear 1000× off).
  - `ES.GetStatus` can be unresponsive on some Venus E v3 firmwares (reported on v137 / v139).
@@ -290,21 +291,18 @@ Example warnings:
 Quick note for issue reports (EN): always attach the integration diagnostics export and relevant HA logs when filing a bug — it is required for effective troubleshooting.
 
 
-### Standalone connectivity test
+### Standalone device tool
 
-In the repository you'll find `test/test_discovery.py`, a small CLI that reuses the integration code to probe connectivity outside Home Assistant:
+In the repository you'll find `test/test_tool.py`, a CLI that reuses the integration code to diagnose and control batteries outside Home Assistant:
 
 ```bash
 cd test
-python3 test_discovery.py                              # broadcast discovery (read-only)
-python3 test_discovery.py 192.168.7.101                # target a specific battery (read-only)
-python3 test_discovery.py --set-test-schedule          # set test schedule on discovered device
-python3 test_discovery.py --clear-all-schedules        # clear all schedules on discovered device
-python3 test_discovery.py --set-test-schedule 192.168.7.101  # set test schedule on specific IP
+python3 test_tool.py discover                       # discover and print diagnostics
+python3 test_tool.py discover --ip 192.168.7.101    # target a specific IP
+python3 test_tool.py set-test-schedules             # apply test schedules
+python3 test_tool.py clear-schedules                # clear manual schedules
+python3 test_tool.py set-passive --power -2000 --duration 3600
+python3 test_tool.py set-mode auto --ip 192.168.7.101
 ```
 
-The read-only mode discovers all reachable batteries, exercises every Local API method, and highlights network issues before you wire the devices into your HA instance.
-
-The schedule testing flags allow you to verify manual mode schedule configuration without setting up Home Assistant. The test schedules configure:
-- **Slot 0** (Charge): 08:00-16:00, Monday-Friday, 2000W charge limit (power = -2000)
-- **Slot 1** (Discharge): 18:00-22:00, Monday-Friday, 800W discharge limit (power = 800)
+The default `discover` command runs the full diagnostic suite. Additional subcommands allow you to verify manual scheduling, passive mode, and operating mode changes without installing Home Assistant.

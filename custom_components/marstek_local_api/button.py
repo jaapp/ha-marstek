@@ -25,6 +25,15 @@ from .coordinator import MarstekDataUpdateCoordinator, MarstekMultiDeviceCoordin
 
 _LOGGER = logging.getLogger(__name__)
 
+DEFAULT_MANUAL_MODE_CFG: dict[str, int | str] = {
+    "time_num": 9,
+    "start_time": "00:00",
+    "end_time": "00:00",
+    "week_set": 0,
+    "power": 0,
+    "enable": 0,
+}
+
 
 def _mode_state_from_config(mode: str, config: dict) -> dict:
     """Extract mode state information from a config payload."""
@@ -196,6 +205,7 @@ class MarstekModeButton(CoordinatorEntity, ButtonEntity):
         elif self._mode == MODE_MANUAL:
             return {
                 "mode": MODE_MANUAL,
+                "manual_cfg": dict(DEFAULT_MANUAL_MODE_CFG),
             }
 
         return {}
@@ -383,6 +393,7 @@ class MarstekMultiDeviceModeButton(CoordinatorEntity, ButtonEntity):
         elif self._mode == MODE_MANUAL:
             return {
                 "mode": MODE_MANUAL,
+                "manual_cfg": dict(DEFAULT_MANUAL_MODE_CFG),
             }
 
         return {}
