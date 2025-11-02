@@ -241,15 +241,3 @@ The read-only mode discovers all reachable batteries, exercises every Local API 
 The schedule testing flags allow you to verify manual mode schedule configuration without setting up Home Assistant. The test schedules configure:
 - **Slot 0** (Charge): 08:00-16:00, Monday-Friday, 2000W charge limit (power = -2000)
 - **Slot 1** (Discharge): 18:00-22:00, Monday-Friday, 800W discharge limit (power = 800)
-
----
-
-## 8. Release Notes
-
-Version **1.0.0** focusses on a stable multi-device experience:
-- kWh-based energy reporting aligned with the Marstek UI.
-- Options flow for renaming, adding, and removing devices after initial setup.
-- `marstek_local_api.request_data_sync` service for immediate refreshes.
-- Aggregated **Marstek System** device for fleet-wide KPIs.
-
-Enjoy running your Marstek batteries locally! Pull requests and feedback are welcome.
