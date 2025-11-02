@@ -6,3 +6,128 @@ request_data_sync:
       name: Config Entry ID
       description: Optional config entry ID to refresh. When omitted, all entries are refreshed.
       example: "1234567890abcdef1234567890abcdef"
+
+set_manual_schedule:
+  name: Set Manual Schedule
+  description: Configure a single manual mode time schedule slot.
+  fields:
+    entity_id:
+      name: Operating Mode Entity
+      description: The operating mode select entity to configure.
+      required: true
+      example: "select.marstek_operating_mode"
+      selector:
+        entity:
+          integration: marstek_local_api
+          domain: select
+    time_num:
+      name: Schedule Slot
+      description: Schedule slot number (0-9). Each slot is an independent schedule.
+      required: true
+      example: 0
+      selector:
+        number:
+          min: 0
+          max: 9
+          mode: slider
+    start_time:
+      name: Start Time
+      description: When to start this schedule (24-hour format).
+      required: true
+      example: "08:00"
+      selector:
+        time:
+    end_time:
+      name: End Time
+      description: When to end this schedule (24-hour format).
+      required: true
+      example: "16:00"
+      selector:
+        time:
+    days:
+      name: Days of Week
+      description: Which days this schedule applies to.
+      default: ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+      example: ["mon", "tue", "wed", "thu", "fri"]
+      selector:
+        select:
+          multiple: true
+          options:
+            - label: Monday
+              value: mon
+            - label: Tuesday
+              value: tue
+            - label: Wednesday
+              value: wed
+            - label: Thursday
+              value: thu
+            - label: Friday
+              value: fri
+            - label: Saturday
+              value: sat
+            - label: Sunday
+              value: sun
+    power:
+      name: Power Limit
+      description: Power limit in watts. Use negative values for charging (e.g., -2000 = 2000W charge limit) and positive values for discharging (e.g., 800 = 800W discharge limit). Use 0 for no limit.
+      default: 0
+      example: -2000
+      selector:
+        number:
+          min: -10000
+          max: 10000
+          step: 100
+          unit_of_measurement: W
+    enabled:
+      name: Enabled
+      description: Whether this schedule is active.
+      default: true
+      selector:
+        boolean:
+
+set_manual_schedules:
+  name: Set Multiple Manual Schedules
+  description: Configure multiple manual mode schedules at once. Advanced feature requiring YAML configuration.
+  fields:
+    entity_id:
+      name: Operating Mode Entity
+      description: The operating mode select entity to configure.
+      required: true
+      example: "select.marstek_operating_mode"
+      selector:
+        entity:
+          integration: marstek_local_api
+          domain: select
+    schedules:
+      name: Schedules
+      description: List of schedules to configure. Each schedule requires time_num, start_time, end_time, and optionally days, power, and enabled. Power uses negative values for charging and positive values for discharging.
+      required: true
+      example: |
+        - time_num: 0
+          start_time: "08:00"
+          end_time: "16:00"
+          days: ["mon", "tue", "wed", "thu", "fri"]
+          power: -2000
+          enabled: true
+        - time_num: 1
+          start_time: "18:00"
+          end_time: "22:00"
+          days: ["mon", "tue", "wed", "thu", "fri"]
+          power: 800
+          enabled: true
+      selector:
+        object:
+
+clear_manual_schedules:
+  name: Clear Manual Schedules
+  description: Remove all configured manual mode schedules by disabling all 10 schedule slots.
+  fields:
+    entity_id:
+      name: Operating Mode Entity
+      description: The operating mode select entity to clear schedules for.
+      required: true
+      example: "select.marstek_operating_mode"
+      selector:
+        entity:
+          integration: marstek_local_api
+          domain: select

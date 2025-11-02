@@ -172,18 +172,10 @@ class MarstekOperatingModeSelect(CoordinatorEntity, SelectEntity):
                 "ai_cfg": {"enable": 1},
             }
         elif mode == MODE_MANUAL:
-            # Default manual mode config (all week, no power limit)
-            # Users can customize via service calls in the future
+            # Manual mode without manual_cfg preserves existing schedules
+            # Users configure schedules separately using set_manual_schedule service
             return {
                 "mode": MODE_MANUAL,
-                "manual_cfg": {
-                    "time_num": 0,
-                    "start_time": "00:00",
-                    "end_time": "23:59",
-                    "week_set": 127,  # All days
-                    "power": 0,
-                    "enable": 1,
-                },
             }
         elif mode == MODE_PASSIVE:
             # Default passive mode config (no power limit, 5 min countdown)
@@ -342,18 +334,10 @@ class MarstekMultiDeviceOperatingModeSelect(CoordinatorEntity, SelectEntity):
                 "ai_cfg": {"enable": 1},
             }
         elif mode == MODE_MANUAL:
-            # Default manual mode config (all week, no power limit)
-            # Users can customize via service calls in the future
+            # Manual mode without manual_cfg preserves existing schedules
+            # Users configure schedules separately using set_manual_schedule service
             return {
                 "mode": MODE_MANUAL,
-                "manual_cfg": {
-                    "time_num": 0,
-                    "start_time": "00:00",
-                    "end_time": "23:59",
-                    "week_set": 127,  # All days
-                    "power": 0,
-                    "enable": 1,
-                },
             }
         elif mode == MODE_PASSIVE:
             # Default passive mode config (no power limit, 5 min countdown)
