@@ -6,3 +6,39 @@ request_data_sync:
       name: Config Entry ID
       description: Optional config entry ID to refresh. When omitted, all entries are refreshed.
       example: "1234567890abcdef1234567890abcdef"
+
+set_passive_mode:
+  name: Set Passive Mode
+  description: Switch to Passive mode with specified power and duration. Use negative power values for charging (e.g., -2000 = charge at 2000W) and positive values for discharging (e.g., 1500 = discharge at 1500W).
+  fields:
+    entity_id:
+      name: Operating Mode Sensor
+      description: The operating mode sensor entity to configure.
+      required: true
+      example: "sensor.marstek_operating_mode"
+      selector:
+        entity:
+          integration: marstek_local_api
+          domain: sensor
+    power:
+      name: Power
+      description: Power in watts. Negative values = charging (e.g., -2000 = charge at 2000W), positive values = discharging (e.g., 1500 = discharge at 1500W).
+      required: true
+      example: -2000
+      selector:
+        number:
+          min: -10000
+          max: 10000
+          step: 100
+          unit_of_measurement: W
+    duration:
+      name: Duration
+      description: Duration in seconds (1-86400). For example, 3600 = 1 hour.
+      required: true
+      example: 3600
+      selector:
+        number:
+          min: 1
+          max: 86400
+          step: 60
+          unit_of_measurement: s

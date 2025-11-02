@@ -93,3 +93,4 @@ PLATFORMS: Final = ["sensor", "binary_sensor", "select"]
 
 # Services
 SERVICE_REQUEST_SYNC: Final = "request_data_sync"
+SERVICE_SET_PASSIVE_MODE: Final = "set_passive_mode"
