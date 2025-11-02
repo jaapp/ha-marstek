@@ -26,10 +26,8 @@ DEFAULT_PORT = 30000
 DISCOVERY_TIMEOUT = 9
 COMMAND_TIMEOUT = 15
 MAX_RETRIES = 3
-BACKOFF_BASE = 1.5
-BACKOFF_FACTOR = 2.0
-BACKOFF_MAX = 12.0
 RATE_LIMIT_DELAY = 15.0  # Matches production integration; override with --delay for faster probing
+# Retry backoff uses the delay multiplier (1x, 3x, ...), so longer delays probe more gently.
 
 LOG_DIR = Path(__file__).resolve().parent / "logs"
 LOG_FILE = LOG_DIR / "discover_api.log"
@@ -244,9 +242,12 @@ class MarstekApiDiscovery:
                     if self.verbose:
                         log(f"  ⏱️  {last_error}")
 
-                    # Exponential backoff before retry
+                    # Delay before retry using configured multiplier
                     if attempt < retries:
-                        backoff = min(BACKOFF_BASE * (BACKOFF_FACTOR ** (attempt - 1)), BACKOFF_MAX)
+                        multiplier = 1 if attempt == 1 else 3
+                        backoff = self.delay * multiplier
+                        if self.verbose:
+                            log(f"  🔁 Retry in {backoff:.1f}s (multiplier x{multiplier})")
                         time.sleep(backoff)
 
             except Exception as e:
@@ -422,6 +423,13 @@ def test_all_endpoints(client: MarstekApiDiscovery):
 
     total = len(ENDPOINT_CANDIDATES)
     max_wait = COMMAND_TIMEOUT * MAX_RETRIES
+    multipliers: list[float] = []
+    if MAX_RETRIES > 1:
+        multipliers.append(1.0)
+        if MAX_RETRIES > 2:
+            multipliers.extend([3.0] * (MAX_RETRIES - 2))
+    backoff_total = sum(multiplier * client.delay for multiplier in multipliers)
+    max_wait_with_backoff = max_wait + backoff_total
 
     for idx, (method, params) in enumerate(ENDPOINT_CANDIDATES, 1):
         params_str = json.dumps(params) if params != {"id": 0} else ""
@@ -430,7 +438,7 @@ def test_all_endpoints(client: MarstekApiDiscovery):
         if client.verbose:
             log(f"[{idx}/{total}] Testing {label}...", flush=True)
         else:
-            log(f"[{idx}/{total}] Testing {label} (max wait ~{max_wait}s)", flush=True)
+            log(f"[{idx}/{total}] Testing {label} (max wait ~{max_wait_with_backoff:.0f}s incl. backoff)", flush=True)
 
         result = client.test_endpoint(method, params)
 
