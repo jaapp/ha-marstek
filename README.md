@@ -118,7 +118,7 @@ The `sensor.marstek_operating_mode` displays the current active mode (Auto, AI, 
 
 The integration provides three services for configuring manual mode schedules. Manual mode allows you to define up to 10 time-based schedules that control when the battery charges/discharges and at what power level.
 
-> Select the **battery device** for all schedule services. The integration resolves the correct manual mode button automatically.
+> Select the **battery device** for all schedule services. The integration targets the correct device coordinator automatically.
 
 > **Note:** The Marstek Local API does not support reading schedule configurations back from the device. Schedules are write-only, so the integration cannot display currently configured schedules.
 
@@ -212,7 +212,7 @@ The `marstek_local_api.set_passive_mode` service enables **Passive mode** for di
 
 | Parameter | Required | Type | Range | Description |
 | --- | --- | --- | --- | --- |
-| `device_id` | Yes | string | - | Battery to control. The integration resolves the operating mode sensor automatically. |
+| `device_id` | Yes | string | - | Battery to control. The integration communicates with the selected device directly. |
 | `power` | Yes | integer | -10000 to 10000 | Power in watts (negative = charge, positive = discharge) |
 | `duration` | Yes | integer | 1 to 86400 | Duration in seconds (max 24 hours) |
 

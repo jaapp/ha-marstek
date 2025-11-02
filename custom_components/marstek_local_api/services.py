@@ -10,7 +10,7 @@ import voluptuous as vol
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers import device_registry as dr
 
 from .const import (
     DATA_COORDINATOR,
@@ -91,97 +91,72 @@ SERVICE_SET_PASSIVE_MODE_SCHEMA = vol.Schema(
 )
 
 
-def _resolve_entity_context(
+def _resolve_device_context(
     hass: HomeAssistant,
-    entity_id: str,
-    *,
-    require_manual_button: bool = False,
+    device_id: str,
 ) -> tuple[MarstekDataUpdateCoordinator, MarstekMultiDeviceCoordinator | None, str | None]:
-    """Resolve the per-device coordinator (and aggregate coordinator if any) for an entity."""
-    entity_registry = er.async_get(hass)
-    entity_entry = entity_registry.async_get(entity_id)
-
-    if not entity_entry:
-        raise HomeAssistantError(f"Unknown entity_id: {entity_id}")
-
-    domain_data = hass.data.get(DOMAIN, {})
-
+    """Resolve the per-device coordinator (and aggregate coordinator if any) for a Home Assistant device."""
+    domain_data = hass.data.get(DOMAIN)
     if not domain_data:
         raise HomeAssistantError("Integration has no active entries")
 
-    if not entity_entry.config_entry_id:
-        raise HomeAssistantError(
-            f"Entity {entity_id} is not associated with a Marstek config entry"
-        )
-
-    if require_manual_button:
-        unique_id = entity_entry.unique_id or ""
-        if entity_entry.platform != "button" or not unique_id.endswith("_manual_mode_button"):
-            raise HomeAssistantError(
-                f"{entity_id} is not the manual mode button. Please select the manual mode button "
-                "entity (e.g., button.marstek_manual_mode)."
-            )
-
-    entry_payload = domain_data.get(entity_entry.config_entry_id)
-    if not entry_payload:
-        raise HomeAssistantError(
-            f"Entity {entity_id} is not part of an active Marstek config entry"
-        )
-
-    base_coordinator = entry_payload.get(DATA_COORDINATOR)
-    if base_coordinator is None:
-        raise HomeAssistantError(
-            f"Entity {entity_id} is missing coordinator context"
-        )
-
-    if isinstance(base_coordinator, MarstekDataUpdateCoordinator):
-        return base_coordinator, None, None
-
-    # Multi-device entry: map the entity to a specific device coordinator
-    if not entity_entry.device_id:
-        raise HomeAssistantError(
-            f"Entity {entity_id} is not linked to a Marstek device"
-        )
-
     device_registry = dr.async_get(hass)
-    device_entry = device_registry.async_get(entity_entry.device_id)
-
+    device_entry = device_registry.async_get(device_id)
     if not device_entry:
+        raise HomeAssistantError(f"Unknown device_id: {device_id}")
+
+    if not device_entry.config_entries:
         raise HomeAssistantError(
-            f"Entity {entity_id} device could not be resolved"
+            f"Device {device_id} is not associated with any Marstek config entry"
         )
 
-    device_identifier: str | None = None
-    for domain, identifier in device_entry.identifiers:
-        if domain == DOMAIN:
-            device_identifier = identifier
-            break
+    for entry_id in device_entry.config_entries:
+        entry_payload = domain_data.get(entry_id)
+        if not entry_payload:
+            continue
 
-    if not device_identifier:
-        raise HomeAssistantError(
-            f"Entity {entity_id} device lacks Marstek identifiers"
-        )
+        coordinator = entry_payload.get(DATA_COORDINATOR)
+        if coordinator is None:
+            continue
 
-    if device_identifier.startswith("system_"):
-        raise HomeAssistantError(
-            f"Entity {entity_id} targets the aggregate system; please choose a specific device entity"
-        )
+        if isinstance(coordinator, MarstekDataUpdateCoordinator):
+            return coordinator, None, None
 
-    device_coordinator = base_coordinator.device_coordinators.get(device_identifier)
-    if device_coordinator is None:
-        # Fallback to case-insensitive comparison
-        for mac, candidate in base_coordinator.device_coordinators.items():
-            if mac.lower() == device_identifier.lower():
-                device_coordinator = candidate
-                device_identifier = mac
+        device_identifier: str | None = None
+        for domain, identifier in device_entry.identifiers:
+            if domain == DOMAIN:
+                device_identifier = identifier
                 break
 
-    if device_coordinator is None:
-        raise HomeAssistantError(
-            f"Could not find device coordinator for entity {entity_id}"
-        )
+        if not device_identifier:
+            raise HomeAssistantError(
+                f"Device {device_id} lacks Marstek identifiers"
+            )
 
-    return device_coordinator, base_coordinator, device_identifier
+        if device_identifier.startswith("system_"):
+            raise HomeAssistantError(
+                f"Device {device_id} targets the aggregate system; please choose a specific battery device"
+            )
+
+        device_coordinator = coordinator.device_coordinators.get(device_identifier)
+        if device_coordinator is None:
+            # Fallback to case-insensitive comparison
+            for mac, candidate in coordinator.device_coordinators.items():
+                if mac.lower() == device_identifier.lower():
+                    device_coordinator = candidate
+                    device_identifier = mac
+                    break
+
+        if device_coordinator is None:
+            raise HomeAssistantError(
+                f"Could not find device coordinator for device {device_id}"
+            )
+
+        return device_coordinator, coordinator, device_identifier
+
+    raise HomeAssistantError(
+        f"Device {device_id} is not part of an active Marstek config entry"
+    )
 
 
 async def _refresh_after_write(
@@ -225,62 +200,6 @@ def _apply_local_mode_state(
         devices[device_identifier] = device_data
         aggregate_data["devices"] = devices
         aggregate_coordinator.async_set_updated_data(aggregate_data)
-
-
-def _find_entity_for_device(
-    hass: HomeAssistant,
-    device_id: str,
-    *,
-    domain: str,
-    unique_suffix: str,
-) -> str:
-    """Locate a specific entity for a device using domain and unique suffix."""
-    entity_registry = er.async_get(hass)
-    matches: list[str] = []
-
-    for entry in entity_registry.entities.values():
-        if entry.device_id != device_id:
-            continue
-        if entry.platform != domain:
-            continue
-        unique_id = entry.unique_id or ""
-        if not unique_id.endswith(unique_suffix):
-            continue
-        matches.append(entry.entity_id)
-
-    if not matches:
-        raise HomeAssistantError(
-            f"Device {device_id} does not expose the required {domain} entity"
-        )
-    if len(matches) > 1:
-        _LOGGER.debug(
-            "Device %s has multiple %s entities ending with %s, using %s",
-            device_id,
-            domain,
-            unique_suffix,
-            matches[0],
-        )
-    return matches[0]
-
-
-def _resolve_manual_button_entity_id(hass: HomeAssistant, device_id: str) -> str:
-    """Resolve the manual mode button entity for a given device."""
-    return _find_entity_for_device(
-        hass,
-        device_id,
-        domain="button",
-        unique_suffix="_manual_mode_button",
-    )
-
-
-def _resolve_operating_mode_sensor_entity_id(hass: HomeAssistant, device_id: str) -> str:
-    """Resolve the operating mode sensor entity for a given device."""
-    return _find_entity_for_device(
-        hass,
-        device_id,
-        domain="sensor",
-        unique_suffix="_operating_mode",
-    )
 
 
 async def async_setup_services(hass: HomeAssistant) -> None:
@@ -348,7 +267,6 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     async def _async_set_manual_schedule(call: ServiceCall) -> None:
         """Set a single manual mode schedule."""
         device_id = call.data["device_id"]
-        entity_id = _resolve_manual_button_entity_id(hass, device_id)
         time_num = call.data["time_num"]
         start_time: time = call.data["start_time"]
         end_time: time = call.data["end_time"]
@@ -356,10 +274,9 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         power = call.data["power"]
         enabled = call.data["enabled"]
 
-        device_coordinator, aggregate_coordinator, device_identifier = _resolve_entity_context(
+        device_coordinator, aggregate_coordinator, device_identifier = _resolve_device_context(
             hass,
-            entity_id,
-            require_manual_button=True,
+            device_id,
         )
         target_label = device_identifier or device_id
 
@@ -406,13 +323,11 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     async def _async_set_manual_schedules(call: ServiceCall) -> None:
         """Set multiple manual mode schedules at once."""
         device_id = call.data["device_id"]
-        entity_id = _resolve_manual_button_entity_id(hass, device_id)
         schedules = call.data["schedules"]
 
-        device_coordinator, aggregate_coordinator, device_identifier = _resolve_entity_context(
+        device_coordinator, aggregate_coordinator, device_identifier = _resolve_device_context(
             hass,
-            entity_id,
-            require_manual_button=True,
+            device_id,
         )
         target_label = device_identifier or device_id
 
@@ -479,12 +394,10 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     async def _async_clear_manual_schedules(call: ServiceCall) -> None:
         """Clear all manual schedules by disabling all slots."""
         device_id = call.data["device_id"]
-        entity_id = _resolve_manual_button_entity_id(hass, device_id)
 
-        device_coordinator, aggregate_coordinator, device_identifier = _resolve_entity_context(
+        device_coordinator, aggregate_coordinator, device_identifier = _resolve_device_context(
             hass,
-            entity_id,
-            require_manual_button=True,
+            device_id,
         )
         target_label = device_identifier or device_id
 
@@ -562,13 +475,12 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     async def _async_set_passive_mode(call: ServiceCall) -> None:
         """Set passive mode with specified power and duration."""
         device_id = call.data["device_id"]
-        entity_id = _resolve_operating_mode_sensor_entity_id(hass, device_id)
         power = call.data["power"]
         duration = call.data["duration"]
 
-        device_coordinator, aggregate_coordinator, device_identifier = _resolve_entity_context(
+        device_coordinator, aggregate_coordinator, device_identifier = _resolve_device_context(
             hass,
-            entity_id,
+            device_id,
         )
         target_label = device_identifier or device_id
 
