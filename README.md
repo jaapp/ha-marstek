@@ -182,6 +182,8 @@ data:
   device_id: "1234567890abcdef1234567890abcdef"
 ```
 
+> Expect this call to run for several minutes—the Marstek API accepts only one slot at a time and rejects most writes on the first attempt, so the integration walks through all ten slots with retries and back-off until the device finally accepts them.
+
 #### Schedule Parameters
 
 - **time_num**: Schedule slot number (0-9). Each slot is independent.
