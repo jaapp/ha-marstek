@@ -10,6 +10,7 @@ import voluptuous as vol
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 
 from .const import (
     DATA_COORDINATOR,
@@ -89,24 +90,104 @@ def _days_to_week_set(days: list[str]) -> int:
     return sum(WEEKDAY_MAP[day] for day in days)
 
 
-def _find_coordinator_for_entity(hass: HomeAssistant, entity_id: str) -> MarstekDataUpdateCoordinator | None:
-    """Find the coordinator that manages the given entity."""
+def _resolve_entity_context(
+    hass: HomeAssistant, entity_id: str
+) -> tuple[MarstekDataUpdateCoordinator, MarstekMultiDeviceCoordinator | None, str | None]:
+    """Resolve the per-device coordinator (and aggregate coordinator if any) for an entity."""
+    entity_registry = er.async_get(hass)
+    entity_entry = entity_registry.async_get(entity_id)
+
+    if not entity_entry:
+        raise HomeAssistantError(f"Unknown entity_id: {entity_id}")
+
     domain_data = hass.data.get(DOMAIN, {})
 
-    for entry_id, entry_payload in domain_data.items():
-        coordinator = entry_payload.get(DATA_COORDINATOR)
+    if not domain_data:
+        raise HomeAssistantError("Integration has no active entries")
 
-        if isinstance(coordinator, MarstekMultiDeviceCoordinator):
-            # Check if entity belongs to any device in this multi-device coordinator
-            for device_coordinator in coordinator.device_coordinators.values():
-                # Entity IDs contain the device MAC, we can check if this coordinator matches
-                # For now, just return the first device coordinator
-                # TODO: Better entity -> coordinator mapping
-                return device_coordinator
-        elif isinstance(coordinator, MarstekDataUpdateCoordinator):
-            return coordinator
+    if not entity_entry.config_entry_id:
+        raise HomeAssistantError(
+            f"Entity {entity_id} is not associated with a Marstek config entry"
+        )
 
-    return None
+    entry_payload = domain_data.get(entity_entry.config_entry_id)
+    if not entry_payload:
+        raise HomeAssistantError(
+            f"Entity {entity_id} is not part of an active Marstek config entry"
+        )
+
+    base_coordinator = entry_payload.get(DATA_COORDINATOR)
+    if base_coordinator is None:
+        raise HomeAssistantError(
+            f"Entity {entity_id} is missing coordinator context"
+        )
+
+    if isinstance(base_coordinator, MarstekDataUpdateCoordinator):
+        return base_coordinator, None, None
+
+    # Multi-device entry: map the entity to a specific device coordinator
+    if not entity_entry.device_id:
+        raise HomeAssistantError(
+            f"Entity {entity_id} is not linked to a Marstek device"
+        )
+
+    device_registry = dr.async_get(hass)
+    device_entry = device_registry.async_get(entity_entry.device_id)
+
+    if not device_entry:
+        raise HomeAssistantError(
+            f"Entity {entity_id} device could not be resolved"
+        )
+
+    device_identifier: str | None = None
+    for domain, identifier in device_entry.identifiers:
+        if domain == DOMAIN:
+            device_identifier = identifier
+            break
+
+    if not device_identifier:
+        raise HomeAssistantError(
+            f"Entity {entity_id} device lacks Marstek identifiers"
+        )
+
+    if device_identifier.startswith("system_"):
+        raise HomeAssistantError(
+            f"Entity {entity_id} targets the aggregate system; please choose a specific device entity"
+        )
+
+    device_coordinator = base_coordinator.device_coordinators.get(device_identifier)
+    if device_coordinator is None:
+        # Fallback to case-insensitive comparison
+        for mac, candidate in base_coordinator.device_coordinators.items():
+            if mac.lower() == device_identifier.lower():
+                device_coordinator = candidate
+                device_identifier = mac
+                break
+
+    if device_coordinator is None:
+        raise HomeAssistantError(
+            f"Could not find device coordinator for entity {entity_id}"
+        )
+
+    return device_coordinator, base_coordinator, device_identifier
+
+
+async def _refresh_after_write(
+    device_coordinator: MarstekDataUpdateCoordinator,
+    aggregate_coordinator: MarstekMultiDeviceCoordinator | None,
+) -> None:
+    """Refresh device/aggregate coordinators after a state-changing operation."""
+    try:
+        await device_coordinator.async_request_refresh()
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.warning("Failed to refresh device coordinator after write: %s", err)
+
+    if aggregate_coordinator:
+        try:
+            await aggregate_coordinator.async_request_refresh()
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning("Failed to refresh aggregate coordinator after write: %s", err)
+
 
 
 async def async_setup_services(hass: HomeAssistant) -> None:
@@ -155,10 +236,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         power = call.data["power"]
         enabled = call.data["enabled"]
 
-        # Find coordinator
-        coordinator = _find_coordinator_for_entity(hass, entity_id)
-        if not coordinator:
-            raise HomeAssistantError(f"Could not find coordinator for entity: {entity_id}")
+        device_coordinator, aggregate_coordinator, device_identifier = _resolve_entity_context(hass, entity_id)
+        target_label = device_identifier or entity_id
 
         # Build manual_cfg
         manual_cfg = {
@@ -177,13 +256,14 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
         # Set mode via API
         try:
-            success = await coordinator.api.set_es_mode(config)
+            success = await device_coordinator.api.set_es_mode(config)
             if success:
                 _LOGGER.info(
-                    "Successfully set manual schedule %d for %s", time_num, entity_id
+                    "Successfully set manual schedule %d for %s",
+                    time_num,
+                    target_label,
                 )
-                # Refresh coordinator
-                await coordinator.async_request_refresh()
+                await _refresh_after_write(device_coordinator, aggregate_coordinator)
             else:
                 raise HomeAssistantError(
                     f"Device rejected schedule configuration for slot {time_num}"
@@ -197,11 +277,10 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         entity_id = call.data["entity_id"]
         schedules = call.data["schedules"]
 
-        coordinator = _find_coordinator_for_entity(hass, entity_id)
-        if not coordinator:
-            raise HomeAssistantError(f"Could not find coordinator for entity: {entity_id}")
+        device_coordinator, aggregate_coordinator, device_identifier = _resolve_entity_context(hass, entity_id)
+        target_label = device_identifier or entity_id
 
-        _LOGGER.info("Setting %d manual schedules for %s", len(schedules), entity_id)
+        _LOGGER.info("Setting %d manual schedules for %s", len(schedules), target_label)
 
         failed_slots = []
 
@@ -229,7 +308,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             }
 
             try:
-                success = await coordinator.api.set_es_mode(config)
+                success = await device_coordinator.api.set_es_mode(config)
                 if success:
                     _LOGGER.debug("Successfully set schedule slot %d", time_num)
                 else:
@@ -243,7 +322,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             await asyncio.sleep(0.5)
 
         # Refresh coordinator after all schedules are set
-        await coordinator.async_request_refresh()
+        await _refresh_after_write(device_coordinator, aggregate_coordinator)
 
         if failed_slots:
             raise HomeAssistantError(
@@ -256,11 +335,10 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         """Clear all manual schedules by disabling all slots."""
         entity_id = call.data["entity_id"]
 
-        coordinator = _find_coordinator_for_entity(hass, entity_id)
-        if not coordinator:
-            raise HomeAssistantError(f"Could not find coordinator for entity: {entity_id}")
+        device_coordinator, aggregate_coordinator, device_identifier = _resolve_entity_context(hass, entity_id)
+        target_label = device_identifier or entity_id
 
-        _LOGGER.info("Clearing all manual schedules for %s", entity_id)
+        _LOGGER.info("Clearing all manual schedules for %s", target_label)
 
         failed_slots = []
 
@@ -279,7 +357,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             }
 
             try:
-                success = await coordinator.api.set_es_mode(config)
+                success = await device_coordinator.api.set_es_mode(config)
                 if not success:
                     _LOGGER.warning("Device rejected clearing schedule slot %d", i)
                     failed_slots.append(i)
@@ -291,7 +369,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             await asyncio.sleep(0.3)
 
         # Refresh coordinator
-        await coordinator.async_request_refresh()
+        await _refresh_after_write(device_coordinator, aggregate_coordinator)
 
         if failed_slots:
             raise HomeAssistantError(
@@ -327,10 +405,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         power = call.data["power"]
         duration = call.data["duration"]
 
-        # Find coordinator
-        coordinator = _find_coordinator_for_entity(hass, entity_id)
-        if not coordinator:
-            raise HomeAssistantError(f"Could not find coordinator for entity: {entity_id}")
+        device_coordinator, aggregate_coordinator, device_identifier = _resolve_entity_context(hass, entity_id)
+        target_label = device_identifier or entity_id
 
         # Build passive mode config
         config = {
@@ -343,16 +419,15 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
         # Set mode via API
         try:
-            success = await coordinator.api.set_es_mode(config)
+            success = await device_coordinator.api.set_es_mode(config)
             if success:
                 _LOGGER.info(
                     "Successfully set passive mode: power=%dW, duration=%ds for %s",
                     power,
                     duration,
-                    entity_id,
+                    target_label,
                 )
-                # Refresh coordinator
-                await coordinator.async_request_refresh()
+                await _refresh_after_write(device_coordinator, aggregate_coordinator)
             else:
                 raise HomeAssistantError(
                     f"Device rejected passive mode configuration (power={power}W, duration={duration}s)"
