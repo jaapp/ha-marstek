@@ -36,62 +36,88 @@ SERVICE_REQUEST_SYNC_SCHEMA = vol.Schema(
 )
 
 # Schedule service schemas
-SERVICE_SET_MANUAL_SCHEDULE_SCHEMA = vol.Schema(
-    {
-        vol.Required("entity_id"): cv.entity_id,
-        vol.Required("time_num"): vol.All(vol.Coerce(int), vol.Range(min=0, max=MAX_SCHEDULE_SLOTS - 1)),
-        vol.Required("start_time"): cv.time,
-        vol.Required("end_time"): cv.time,
-        vol.Optional("days", default=list(WEEKDAY_MAP.keys())): vol.All(
-            cv.ensure_list, [vol.In(WEEKDAY_MAP.keys())]
-        ),
-        vol.Optional("power", default=0): vol.Coerce(int),  # Negative=charge, positive=discharge, 0=no limit
-        vol.Optional("enabled", default=True): cv.boolean,
-    }
-)
-
-SERVICE_SET_MANUAL_SCHEDULES_SCHEMA = vol.Schema(
-    {
-        vol.Required("entity_id"): cv.entity_id,
-        vol.Required("schedules"): [
-            vol.Schema(
-                {
-                    vol.Required("time_num"): vol.All(vol.Coerce(int), vol.Range(min=0, max=MAX_SCHEDULE_SLOTS - 1)),
-                    vol.Required("start_time"): cv.time,
-                    vol.Required("end_time"): cv.time,
-                    vol.Optional("days", default=list(WEEKDAY_MAP.keys())): vol.All(
-                        cv.ensure_list, [vol.In(WEEKDAY_MAP.keys())]
-                    ),
-                    vol.Optional("power", default=0): vol.Coerce(int),  # Negative=charge, positive=discharge, 0=no limit
-                    vol.Optional("enabled", default=True): cv.boolean,
-                }
-            )
-        ],
-    }
-)
-
-SERVICE_CLEAR_MANUAL_SCHEDULES_SCHEMA = vol.Schema(
-    {
-        vol.Required("entity_id"): cv.entity_id,
-    }
-)
-
-SERVICE_SET_PASSIVE_MODE_SCHEMA = vol.Schema(
-    {
-        vol.Required("entity_id"): cv.entity_id,
-        vol.Required("power"): vol.All(vol.Coerce(int), vol.Range(min=-10000, max=10000)),
-        vol.Required("duration"): vol.All(vol.Coerce(int), vol.Range(min=1, max=86400)),
-    }
-)
-
-
 def _days_to_week_set(days: list[str]) -> int:
     """Convert list of day names to week_set bitmap."""
     return sum(WEEKDAY_MAP[day] for day in days)
 
 
+def _validate_has_target(data: dict) -> dict:
+    """Ensure either entity_id or device_id is supplied."""
+    if "entity_id" not in data and "device_id" not in data:
+        raise vol.Invalid("Provide either entity_id or device_id")
+    return data
+
+
+SERVICE_SET_MANUAL_SCHEDULE_SCHEMA = vol.All(
+    vol.Schema(
+        {
+            vol.Optional("entity_id"): cv.entity_id,
+            vol.Optional("device_id"): cv.string,
+            vol.Required("time_num"): vol.All(vol.Coerce(int), vol.Range(min=0, max=MAX_SCHEDULE_SLOTS - 1)),
+            vol.Required("start_time"): cv.time,
+            vol.Required("end_time"): cv.time,
+            vol.Optional("days", default=list(WEEKDAY_MAP.keys())): vol.All(
+                cv.ensure_list, [vol.In(WEEKDAY_MAP.keys())]
+            ),
+            vol.Optional("power", default=0): vol.Coerce(int),  # Negative=charge, positive=discharge, 0=no limit
+            vol.Optional("enabled", default=True): cv.boolean,
+        }
+    ),
+    _validate_has_target,
+)
+
+SERVICE_SET_MANUAL_SCHEDULES_SCHEMA = vol.All(
+    vol.Schema(
+        {
+            vol.Optional("entity_id"): cv.entity_id,
+            vol.Optional("device_id"): cv.string,
+            vol.Required("schedules"): [
+                vol.Schema(
+                    {
+                        vol.Required("time_num"): vol.All(vol.Coerce(int), vol.Range(min=0, max=MAX_SCHEDULE_SLOTS - 1)),
+                        vol.Required("start_time"): cv.time,
+                        vol.Required("end_time"): cv.time,
+                        vol.Optional("days", default=list(WEEKDAY_MAP.keys())): vol.All(
+                            cv.ensure_list, [vol.In(WEEKDAY_MAP.keys())]
+                        ),
+                        vol.Optional("power", default=0): vol.Coerce(int),  # Negative=charge, positive=discharge, 0=no limit
+                        vol.Optional("enabled", default=True): cv.boolean,
+                    }
+                )
+            ],
+        }
+    ),
+    _validate_has_target,
+)
+
+SERVICE_CLEAR_MANUAL_SCHEDULES_SCHEMA = vol.All(
+    vol.Schema(
+        {
+            vol.Optional("entity_id"): cv.entity_id,
+            vol.Optional("device_id"): cv.string,
+        }
+    ),
+    _validate_has_target,
+)
+
+SERVICE_SET_PASSIVE_MODE_SCHEMA = vol.All(
+    vol.Schema(
+        {
+            vol.Optional("entity_id"): cv.entity_id,
+            vol.Optional("device_id"): cv.string,
+            vol.Required("power"): vol.All(vol.Coerce(int), vol.Range(min=-10000, max=10000)),
+            vol.Required("duration"): vol.All(vol.Coerce(int), vol.Range(min=1, max=86400)),
+        }
+    ),
+    _validate_has_target,
+)
+
+
 def _resolve_entity_context(
-    hass: HomeAssistant, entity_id: str
+    hass: HomeAssistant,
+    entity_id: str,
+    *,
+    require_manual_button: bool = False,
 ) -> tuple[MarstekDataUpdateCoordinator, MarstekMultiDeviceCoordinator | None, str | None]:
     """Resolve the per-device coordinator (and aggregate coordinator if any) for an entity."""
     entity_registry = er.async_get(hass)
@@ -109,6 +135,14 @@ def _resolve_entity_context(
         raise HomeAssistantError(
             f"Entity {entity_id} is not associated with a Marstek config entry"
         )
+
+    if require_manual_button:
+        unique_id = entity_entry.unique_id or ""
+        if entity_entry.platform != "button" or not unique_id.endswith("_manual_mode_button"):
+            raise HomeAssistantError(
+                f"{entity_id} is not the manual mode button. Please select the manual mode button "
+                "entity (e.g., button.marstek_manual_mode)."
+            )
 
     entry_payload = domain_data.get(entity_entry.config_entry_id)
     if not entry_payload:
@@ -189,6 +223,117 @@ async def _refresh_after_write(
             _LOGGER.warning("Failed to refresh aggregate coordinator after write: %s", err)
 
 
+def _apply_local_mode_state(
+    device_coordinator: MarstekDataUpdateCoordinator,
+    aggregate_coordinator: MarstekMultiDeviceCoordinator | None,
+    device_identifier: str | None,
+    mode: str,
+    mode_payload: dict | None = None,
+) -> None:
+    """Update cached coordinator data so operating mode sensors reflect changes immediately."""
+    device_data = dict(device_coordinator.data or {})
+    mode_state: dict[str, object] = {"mode": mode}
+    if mode_payload:
+        mode_state.update(mode_payload)
+
+    current_mode = dict(device_data.get("mode") or {})
+    current_mode.update(mode_state)
+    device_data["mode"] = current_mode
+    device_coordinator.async_set_updated_data(device_data)
+
+    if aggregate_coordinator and device_identifier:
+        aggregate_data = dict(aggregate_coordinator.data or {})
+        devices = dict(aggregate_data.get("devices") or {})
+        devices[device_identifier] = device_data
+        aggregate_data["devices"] = devices
+        aggregate_coordinator.async_set_updated_data(aggregate_data)
+
+
+def _find_entity_for_device(
+    hass: HomeAssistant,
+    device_id: str,
+    *,
+    domain: str,
+    unique_suffix: str,
+) -> str:
+    """Locate a specific entity for a device using domain and unique suffix."""
+    entity_registry = er.async_get(hass)
+    matches: list[str] = []
+
+    for entry in entity_registry.entities.values():
+        if entry.device_id != device_id:
+            continue
+        if entry.platform != domain:
+            continue
+        unique_id = entry.unique_id or ""
+        if not unique_id.endswith(unique_suffix):
+            continue
+        matches.append(entry.entity_id)
+
+    if not matches:
+        raise HomeAssistantError(
+            f"Device {device_id} does not expose the required {domain} entity"
+        )
+    if len(matches) > 1:
+        _LOGGER.debug(
+            "Device %s has multiple %s entities ending with %s, using %s",
+            device_id,
+            domain,
+            unique_suffix,
+            matches[0],
+        )
+    return matches[0]
+
+
+def _resolve_manual_button_entity_id(
+    hass: HomeAssistant,
+    entity_id: str | None,
+    device_id: str | None,
+) -> str:
+    """Resolve the manual mode button entity from an entity_id or device_id."""
+    if device_id:
+        derived = _find_entity_for_device(
+            hass,
+            device_id,
+            domain="button",
+            unique_suffix="_manual_mode_button",
+        )
+        if entity_id and entity_id != derived:
+            raise HomeAssistantError(
+                f"Provided entity_id {entity_id} does not belong to device {device_id}"
+            )
+        entity_id = derived
+
+    if not entity_id:
+        raise HomeAssistantError("Manual mode button entity could not be resolved")
+
+    return entity_id
+
+
+def _resolve_operating_mode_sensor_entity_id(
+    hass: HomeAssistant,
+    entity_id: str | None,
+    device_id: str | None,
+) -> str:
+    """Resolve the operating mode sensor entity from an entity_id or device_id."""
+    if device_id:
+        derived = _find_entity_for_device(
+            hass,
+            device_id,
+            domain="sensor",
+            unique_suffix="_operating_mode",
+        )
+        if entity_id and entity_id != derived:
+            raise HomeAssistantError(
+                f"Provided entity_id {entity_id} does not belong to device {device_id}"
+            )
+        entity_id = derived
+
+    if not entity_id:
+        raise HomeAssistantError("Operating mode sensor entity could not be resolved")
+
+    return entity_id
+
 
 async def async_setup_services(hass: HomeAssistant) -> None:
     """Register integration level services."""
@@ -228,7 +373,11 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
     async def _async_set_manual_schedule(call: ServiceCall) -> None:
         """Set a single manual mode schedule."""
-        entity_id = call.data["entity_id"]
+        entity_id = _resolve_manual_button_entity_id(
+            hass,
+            call.data.get("entity_id"),
+            call.data.get("device_id"),
+        )
         time_num = call.data["time_num"]
         start_time: time = call.data["start_time"]
         end_time: time = call.data["end_time"]
@@ -236,7 +385,11 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         power = call.data["power"]
         enabled = call.data["enabled"]
 
-        device_coordinator, aggregate_coordinator, device_identifier = _resolve_entity_context(hass, entity_id)
+        device_coordinator, aggregate_coordinator, device_identifier = _resolve_entity_context(
+            hass,
+            entity_id,
+            require_manual_button=True,
+        )
         target_label = device_identifier or entity_id
 
         # Build manual_cfg
@@ -263,6 +416,13 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                     time_num,
                     target_label,
                 )
+                _apply_local_mode_state(
+                    device_coordinator,
+                    aggregate_coordinator,
+                    device_identifier,
+                    MODE_MANUAL,
+                    {"manual_cfg": manual_cfg},
+                )
                 await _refresh_after_write(device_coordinator, aggregate_coordinator)
             else:
                 raise HomeAssistantError(
@@ -274,15 +434,24 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
     async def _async_set_manual_schedules(call: ServiceCall) -> None:
         """Set multiple manual mode schedules at once."""
-        entity_id = call.data["entity_id"]
+        entity_id = _resolve_manual_button_entity_id(
+            hass,
+            call.data.get("entity_id"),
+            call.data.get("device_id"),
+        )
         schedules = call.data["schedules"]
 
-        device_coordinator, aggregate_coordinator, device_identifier = _resolve_entity_context(hass, entity_id)
+        device_coordinator, aggregate_coordinator, device_identifier = _resolve_entity_context(
+            hass,
+            entity_id,
+            require_manual_button=True,
+        )
         target_label = device_identifier or entity_id
 
         _LOGGER.info("Setting %d manual schedules for %s", len(schedules), target_label)
 
         failed_slots = []
+        any_success = False
 
         # Set each schedule sequentially
         for schedule in schedules:
@@ -311,6 +480,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 success = await device_coordinator.api.set_es_mode(config)
                 if success:
                     _LOGGER.debug("Successfully set schedule slot %d", time_num)
+                    any_success = True
                 else:
                     _LOGGER.warning("Device rejected schedule slot %d", time_num)
                     failed_slots.append(time_num)
@@ -322,6 +492,13 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             await asyncio.sleep(0.5)
 
         # Refresh coordinator after all schedules are set
+        if any_success:
+            _apply_local_mode_state(
+                device_coordinator,
+                aggregate_coordinator,
+                device_identifier,
+                MODE_MANUAL,
+            )
         await _refresh_after_write(device_coordinator, aggregate_coordinator)
 
         if failed_slots:
@@ -333,14 +510,23 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
     async def _async_clear_manual_schedules(call: ServiceCall) -> None:
         """Clear all manual schedules by disabling all slots."""
-        entity_id = call.data["entity_id"]
+        entity_id = _resolve_manual_button_entity_id(
+            hass,
+            call.data.get("entity_id"),
+            call.data.get("device_id"),
+        )
 
-        device_coordinator, aggregate_coordinator, device_identifier = _resolve_entity_context(hass, entity_id)
+        device_coordinator, aggregate_coordinator, device_identifier = _resolve_entity_context(
+            hass,
+            entity_id,
+            require_manual_button=True,
+        )
         target_label = device_identifier or entity_id
 
         _LOGGER.info("Clearing all manual schedules for %s", target_label)
 
         failed_slots = []
+        any_success = False
 
         # Disable all 10 schedule slots
         for i in range(MAX_SCHEDULE_SLOTS):
@@ -358,7 +544,9 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
             try:
                 success = await device_coordinator.api.set_es_mode(config)
-                if not success:
+                if success:
+                    any_success = True
+                else:
                     _LOGGER.warning("Device rejected clearing schedule slot %d", i)
                     failed_slots.append(i)
             except Exception as err:
@@ -369,6 +557,13 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             await asyncio.sleep(0.3)
 
         # Refresh coordinator
+        if any_success:
+            _apply_local_mode_state(
+                device_coordinator,
+                aggregate_coordinator,
+                device_identifier,
+                MODE_MANUAL,
+            )
         await _refresh_after_write(device_coordinator, aggregate_coordinator)
 
         if failed_slots:
@@ -401,11 +596,18 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
     async def _async_set_passive_mode(call: ServiceCall) -> None:
         """Set passive mode with specified power and duration."""
-        entity_id = call.data["entity_id"]
+        entity_id = _resolve_operating_mode_sensor_entity_id(
+            hass,
+            call.data.get("entity_id"),
+            call.data.get("device_id"),
+        )
         power = call.data["power"]
         duration = call.data["duration"]
 
-        device_coordinator, aggregate_coordinator, device_identifier = _resolve_entity_context(hass, entity_id)
+        device_coordinator, aggregate_coordinator, device_identifier = _resolve_entity_context(
+            hass,
+            entity_id,
+        )
         target_label = device_identifier or entity_id
 
         # Build passive mode config
@@ -426,6 +628,13 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                     power,
                     duration,
                     target_label,
+                )
+                _apply_local_mode_state(
+                    device_coordinator,
+                    aggregate_coordinator,
+                    device_identifier,
+                    MODE_PASSIVE,
+                    {"passive_cfg": config["passive_cfg"]},
                 )
                 await _refresh_after_write(device_coordinator, aggregate_coordinator)
             else:

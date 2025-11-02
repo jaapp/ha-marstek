@@ -9,17 +9,24 @@ request_data_sync:
 
 set_manual_schedule:
   name: Set Manual Schedule
-  description: Configure a single manual mode time schedule slot.
+  description: Configure a single manual mode time schedule slot. Provide either the manual mode button entity or select the battery device.
   fields:
     entity_id:
-      name: Operating Mode Entity
-      description: The operating mode button entity to configure.
-      required: true
+      name: Manual Mode Button
+      description: "The manual mode button entity to configure (e.g., button.marstek_manual_mode)."
+      required: false
       example: "button.marstek_manual_mode"
       selector:
         entity:
           integration: marstek_local_api
           domain: button
+    device_id:
+      name: Battery
+      description: "Select the battery whose manual mode schedules you want to configure."
+      required: false
+      selector:
+        device:
+          integration: marstek_local_api
     time_num:
       name: Schedule Slot
       description: Schedule slot number (0-9). Each slot is an independent schedule.
@@ -87,28 +94,37 @@ set_manual_schedule:
 
 set_manual_schedules:
   name: Set Multiple Manual Schedules
-  description: Configure multiple manual mode schedules at once. Advanced feature requiring YAML configuration.
+  description: Configure manual mode schedules using YAML. Provide the manual mode button entity or select the battery device.
   fields:
     entity_id:
-      name: Operating Mode Entity
-      description: The operating mode button entity to configure.
-      required: true
+      name: Manual Mode Button
+      description: "The manual mode button entity to configure (e.g., button.marstek_manual_mode)."
+      required: false
       example: "button.marstek_manual_mode"
       selector:
         entity:
           integration: marstek_local_api
           domain: button
+    device_id:
+      name: Battery
+      description: "Select the battery whose manual mode schedules you want to configure."
+      required: false
+      selector:
+        device:
+          integration: marstek_local_api
     schedules:
       name: Schedules
-      description: List of schedules to configure. Each schedule requires time_num, start_time, end_time, and optionally days, power, and enabled. Power uses negative values for charging and positive values for discharging.
+      description: List of schedules to configure (YAML list). Each item must include time_num, start_time, end_time, and optionally days, power, and enabled. Power uses negative values for charging and positive values for discharging.
       required: true
       example: |
+        # Slot 0 - weekday charge window
         - time_num: 0
           start_time: "08:00"
           end_time: "16:00"
           days: ["mon", "tue", "wed", "thu", "fri"]
           power: -2000
           enabled: true
+        # Slot 1 - weekday discharge window
         - time_num: 1
           start_time: "18:00"
           end_time: "22:00"
@@ -120,31 +136,45 @@ set_manual_schedules:
 
 clear_manual_schedules:
   name: Clear Manual Schedules
-  description: Remove all configured manual mode schedules by disabling all 10 schedule slots.
+  description: Remove all configured manual mode schedules by disabling all 10 schedule slots. Provide the manual mode button or select the battery device.
   fields:
     entity_id:
-      name: Operating Mode Entity
-      description: The operating mode button entity to clear schedules for.
-      required: true
+      name: Manual Mode Button
+      description: "The manual mode button entity to clear schedules for (e.g., button.marstek_manual_mode)."
+      required: false
       example: "button.marstek_manual_mode"
       selector:
         entity:
           integration: marstek_local_api
           domain: button
+    device_id:
+      name: Battery
+      description: "Select the battery whose schedules you want to clear."
+      required: false
+      selector:
+        device:
+          integration: marstek_local_api
 
 set_passive_mode:
   name: Set Passive Mode
-  description: Switch to Passive mode with specified power and duration. Use negative power values for charging (e.g., -2000 = charge at 2000W) and positive values for discharging (e.g., 1500 = discharge at 1500W).
+  description: Switch to Passive mode with specified power and duration. Use the operating mode sensor entity or select the battery device. Negative power values charge (e.g., -2000 = charge at 2000W), positive values discharge (e.g., 1500 = discharge at 1500W).
   fields:
     entity_id:
       name: Operating Mode Sensor
       description: The operating mode sensor entity to configure.
-      required: true
+      required: false
       example: "sensor.marstek_operating_mode"
       selector:
         entity:
           integration: marstek_local_api
           domain: sensor
+    device_id:
+      name: Battery
+      description: "Select the battery whose passive mode you want to change."
+      required: false
+      selector:
+        device:
+          integration: marstek_local_api
     power:
       name: Power
       description: Power in watts. Negative values = charging (e.g., -2000 = charge at 2000W), positive values = discharging (e.g., 1500 = discharge at 1500W).

@@ -26,6 +26,20 @@ from .coordinator import MarstekDataUpdateCoordinator, MarstekMultiDeviceCoordin
 _LOGGER = logging.getLogger(__name__)
 
 
+def _mode_state_from_config(mode: str, config: dict) -> dict:
+    """Extract mode state information from a config payload."""
+    state: dict[str, object] = {"mode": mode}
+
+    if mode == MODE_AUTO and "auto_cfg" in config:
+        state["auto_cfg"] = dict(config["auto_cfg"])
+    elif mode == MODE_AI and "ai_cfg" in config:
+        state["ai_cfg"] = dict(config["ai_cfg"])
+    elif mode == MODE_MANUAL and "manual_cfg" in config:
+        state["manual_cfg"] = dict(config["manual_cfg"])
+
+    return state
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -118,6 +132,7 @@ class MarstekModeButton(CoordinatorEntity, ButtonEntity):
             for attempt in range(1, MAX_RETRIES + 1):
                 try:
                     if await self.coordinator.api.set_es_mode(config):
+                        self._update_cached_mode(config)
                         _LOGGER.info("Successfully set operating mode to %s", self._mode)
                         success = True
                         break
@@ -184,6 +199,14 @@ class MarstekModeButton(CoordinatorEntity, ButtonEntity):
             }
 
         return {}
+
+    def _update_cached_mode(self, config: dict) -> None:
+        """Update coordinator cache so sensors reflect the new mode immediately."""
+        current = self.coordinator.data or {}
+        updated = dict(current)
+        mode_state = _mode_state_from_config(self._mode, config)
+        updated["mode"] = {**(current.get("mode") or {}), **mode_state}
+        self.coordinator.async_set_updated_data(updated)
 
 
 class MarstekAutoModeButton(MarstekModeButton):
@@ -274,6 +297,7 @@ class MarstekMultiDeviceModeButton(CoordinatorEntity, ButtonEntity):
             for attempt in range(1, MAX_RETRIES + 1):
                 try:
                     if await self.device_coordinator.api.set_es_mode(config):
+                        self._update_cached_mode(config)
                         _LOGGER.info(
                             "Successfully set operating mode to %s for device %s",
                             self._mode,
@@ -362,6 +386,27 @@ class MarstekMultiDeviceModeButton(CoordinatorEntity, ButtonEntity):
             }
 
         return {}
+
+    def _update_device_cache(self, state: dict) -> dict:
+        """Update the per-device coordinator cache and return the new payload."""
+        current_device = self.device_coordinator.data or {}
+        updated_device = dict(current_device)
+        updated_device["mode"] = {**(current_device.get("mode") or {}), **state}
+        self.device_coordinator.async_set_updated_data(updated_device)
+        return updated_device
+
+    def _update_cached_mode(self, config: dict) -> None:
+        """Update device and aggregate caches so sensors reflect the new mode immediately."""
+        state = _mode_state_from_config(self._mode, config)
+        updated_device = self._update_device_cache(state)
+
+        current_system = self.coordinator.data or {}
+        devices = dict((current_system.get("devices") or {}))
+        devices[self.device_mac] = updated_device
+
+        updated_system = dict(current_system)
+        updated_system["devices"] = devices
+        self.coordinator.async_set_updated_data(updated_system)
 
 
 class MarstekMultiDeviceAutoModeButton(MarstekMultiDeviceModeButton):
