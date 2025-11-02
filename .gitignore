@@ -38,3 +38,4 @@ wheels/
 
 # Home Assistant
 home-assistant.log
+test/logs/
