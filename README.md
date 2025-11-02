@@ -133,7 +133,7 @@ Configure one schedule slot at a time through the Home Assistant UI:
 ```yaml
 service: marstek_local_api.set_manual_schedule
 data:
-  entity_id: select.marstek_operating_mode
+  entity_id: button.marstek_manual_mode
   time_num: 0  # Slot 0-9
   start_time: "08:00"
   end_time: "16:00"
@@ -154,7 +154,7 @@ Configure several slots at once using YAML mode in Developer Tools → Services:
 ```yaml
 service: marstek_local_api.set_manual_schedules
 data:
-  entity_id: select.marstek_operating_mode
+  entity_id: button.marstek_manual_mode
   schedules:
     - time_num: 0
       start_time: "08:00"
@@ -177,7 +177,7 @@ Remove all configured schedules by disabling all 10 slots:
 ```yaml
 service: marstek_local_api.clear_manual_schedules
 data:
-  entity_id: select.marstek_operating_mode
+  entity_id: button.marstek_manual_mode
 ```
 
 #### Schedule Parameters
@@ -190,7 +190,7 @@ data:
 
 #### Important Notes
 
-- Changing the operating mode to Manual via the select entity will **not** activate any schedules automatically. You must configure schedules using the services above.
+- Changing the operating mode to Manual via the button entity will **not** activate any schedules automatically. You must configure schedules using the services above.
 - Multiple schedules can overlap. The device handles priority internally.
 - Schedule configurations are stored on the device and persist across reboots.
 - Since schedule reading is not supported, keep a copy of your schedule configuration in Home Assistant automations or scripts.
