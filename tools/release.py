@@ -135,7 +135,7 @@ def compute_rc_version(
 ) -> tuple[str, int]:
     """Determine release candidate version string."""
     tags_output = run_git(["tag"], capture_output=True)
-    pattern = re.compile(rf"^v{re.escape(base_version)}-rc\.(\d+)$")
+    pattern = re.compile(rf"^v{re.escape(base_version)}\.rc(\d+)$")
     existing_rcs = [int(match.group(1)) for tag in tags_output.splitlines() if (match := pattern.match(tag))]
 
     if rc_number is None:
@@ -144,10 +144,10 @@ def compute_rc_version(
         raise ReleaseError("RC number must be positive.")
     elif rc_number in existing_rcs:
         raise ReleaseError(
-            f"Release candidate v{base_version}-rc.{rc_number} already exists."
+            f"Release candidate v{base_version}.rc{rc_number} already exists."
         )
 
-    rc_version = f"{base_version}-rc.{rc_number}"
+    rc_version = f"{base_version}.rc{rc_number}"
     return rc_version, rc_number
 
 
@@ -749,14 +749,17 @@ def increment_base_version(version: str, increment: str) -> str:
     return f"{major}.{minor}.{patch}"
 
 
+RC_VERSION_REGEX = re.compile(r"^(\d+\.\d+\.\d+)\.rc(\d+)$")
+
+
 def is_rc_version(version: str) -> bool:
     """Return True if version string denotes a release candidate."""
-    return "-rc." in version
+    return bool(RC_VERSION_REGEX.fullmatch(version))
 
 
 def parse_rc_components(version: str) -> tuple[str, int]:
     """Extract base version and RC number from an RC version string."""
-    match = re.fullmatch(r"(\d+\.\d+\.\d+)-rc\.(\d+)", version)
+    match = RC_VERSION_REGEX.fullmatch(version)
     if not match:
         raise ReleaseError(f"Invalid RC version: {version}")
     base_version = match.group(1)
