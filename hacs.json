@@ -1,7 +1,6 @@
 {
   "name": "Marstek Local API",
   "render_readme": true,
-  "domains": ["sensor", "binary_sensor", "select"],
   "content_in_root": false,
   "filename": "marstek_local_api.zip",
   "zip_release": false
