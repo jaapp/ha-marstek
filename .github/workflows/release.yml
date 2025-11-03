@@ -1,0 +1,50 @@
+name: Release Validation
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  release:
+    types:
+      - published
+
+jobs:
+  manifest-version:
+    name: Verify Manifest Version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Determine release tag
+        id: tag
+        shell: bash
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          elif [ "${GITHUB_EVENT_NAME}" = "release" ]; then
+            echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "Unsupported event type: ${GITHUB_EVENT_NAME}" >&2
+            exit 1
+          fi
+
+      - name: Ensure manifest version matches release tag
+        shell: bash
+        run: |
+          TAG_NAME="${{ steps.tag.outputs.tag }}"
+          if [ -z "${TAG_NAME}" ]; then
+            echo "Failed to determine release tag."
+            exit 1
+          fi
+
+          TRIMMED_TAG="${TAG_NAME#v}"
+          MANIFEST_VERSION=$(jq -r '.version' custom_components/marstek/manifest.json)
+
+          echo "Tag: ${TAG_NAME}"
+          echo "Manifest version: ${MANIFEST_VERSION}"
+
+          if [ "${MANIFEST_VERSION}" != "${TRIMMED_TAG}" ]; then
+            echo "Manifest version must match the release tag (without leading 'v')."
+            exit 1
+          fi
