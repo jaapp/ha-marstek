@@ -1,7 +1,9 @@
 {
   "domain": "marstek_local_api",
   "name": "Marstek Local API",
-  "codeowners": ["@jaapp"],
+  "codeowners": [
+    "@jaapp"
+  ],
   "config_flow": true,
   "dhcp": [
     {
@@ -13,5 +15,5 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/jaapp/ha-marstek-local-api/issues",
   "requirements": [],
-  "version": "1.0.0"
+  "version": "1.2.0.rc7"
 }
