@@ -101,6 +101,7 @@ class CompatibilityMatrix:
             (HW_VERSION_2, 0): 1.0,      # FW 0-153: raw value in °C
             (HW_VERSION_2, 154): 0.1,    # FW 154+: raw value in deci-°C (÷0.1 = ×10)
             (HW_VERSION_3, 0): 1.0,      # FW 0+: raw value in °C
+            (HW_VERSION_3, 139): 10.0,   # FW 0+: raw value in deca-°C (÷10)
         },
 
         # Battery capacity (Wh)
@@ -108,6 +109,7 @@ class CompatibilityMatrix:
             (HW_VERSION_2, 0): 100.0,    # FW 0-153: raw value in centi-Wh (÷100)
             (HW_VERSION_2, 154): 1.0,    # FW 154+: raw value in Wh
             (HW_VERSION_3, 0): 1.0,      # FW 0+: raw value in Wh
+            (HW_VERSION_3, 139): 0.1,      # FW 0+: raw value in deci-Wh (÷0.1)
         },
 
         # Battery power (W)
