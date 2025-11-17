@@ -25,7 +25,9 @@ import json
 import sys
 from pathlib import Path
 from typing import Any, Callable
+import logging
 
+#logging.basicConfig(level=logging.DEBUG)
 
 def load_module_from_file(module_name: str, file_path: Path):
     """Load a Python module directly from a file path."""
@@ -579,7 +581,7 @@ async def discover_and_test(target_ip: str | None) -> None:
                 print("  ⚠️  Failed to get battery status")
             print()
 
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(5.0)
             print("⚡ Energy System Status")
             print("-" * 80)
             es_status = await api.get_es_status()
