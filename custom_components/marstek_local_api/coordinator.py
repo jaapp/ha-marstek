@@ -393,8 +393,20 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator):
         last_update = self.category_last_updated[category]
         elapsed = time.time() - last_update
 
+        stale_factor = {
+            "battery": UPDATE_INTERVAL_FAST,
+            "es": UPDATE_INTERVAL_FAST,
+            "em": UPDATE_INTERVAL_MEDIUM,
+            "pv": UPDATE_INTERVAL_MEDIUM,
+            "mode": UPDATE_INTERVAL_MEDIUM,
+            "ble": UPDATE_INTERVAL_SLOW,
+            "wifi": UPDATE_INTERVAL_SLOW,
+        }
+
+        category_stale_factor = stale_factor.get(category, 1)
+
         # Calculate max age (update interval * threshold)
-        max_age = self.update_interval.total_seconds() * self.STALENESS_THRESHOLD
+        max_age = self.update_interval.total_seconds() * self.STALENESS_THRESHOLD * category_stale_factor
 
         return elapsed < max_age
 
