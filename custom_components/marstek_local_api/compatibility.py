@@ -99,7 +99,7 @@ class CompatibilityMatrix:
         # Battery temperature (°C)
         "bat_temp": {
             (HW_VERSION_2, 0): 1.0,      # FW 0-153: raw value in °C
-            (HW_VERSION_2, 154): 0.1,    # FW 154+: raw value in deci-°C (÷0.1 = ×10)
+            (HW_VERSION_2, 154): 1,    # FW 154+: raw value in deci-°C
             (HW_VERSION_3, 0): 1.0,      # FW 0+: raw value in °C
             (HW_VERSION_3, 139): 10.0,   # FW 0+: raw value in deca-°C (÷10)
         },
